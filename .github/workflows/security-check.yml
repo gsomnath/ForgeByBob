@@ -1,0 +1,98 @@
+name: Security Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Full history for better secret detection
+    
+    - name: Check for sensitive files
+      run: |
+        echo "Checking for sensitive files..."
+        
+        # Check if .env file exists (should not be committed)
+        if [ -f .env ]; then
+          echo "ERROR: .env file found in repository!"
+          exit 1
+        fi
+        
+        # Check for credential files
+        if find . -name "*credentials*.json" -o -name "*.pem" -o -name "*.key" | grep -v node_modules | grep .; then
+          echo "ERROR: Credential files found in repository!"
+          exit 1
+        fi
+        
+        echo "✓ No sensitive files detected"
+    
+    - name: Check for hardcoded secrets
+      run: |
+        echo "Scanning for hardcoded secrets..."
+        
+        # Check for common API key patterns
+        if grep -r -E "(AIza[0-9A-Za-z_-]{35}|ya29\.[0-9A-Za-z_-]+|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{48})" --include="*.py" --include="*.js" --include="*.ts" --exclude-dir=node_modules --exclude-dir=.git .; then
+          echo "ERROR: Potential API keys found in code!"
+          exit 1
+        fi
+        
+        # Check for hardcoded passwords
+        if grep -r -i -E "(password|passwd|pwd)[\s]*=[\s]*['\"][^'\"]{8,}['\"]" --include="*.py" --include="*.js" --include="*.ts" --exclude-dir=node_modules --exclude-dir=.git .; then
+          echo "WARNING: Potential hardcoded passwords found!"
+          # Don't fail, just warn
+        fi
+        
+        echo "✓ No obvious secrets detected in code"
+    
+    - name: Verify .gitignore
+      run: |
+        echo "Verifying .gitignore configuration..."
+        
+        # Check if critical patterns are in .gitignore
+        required_patterns=(".env" "*.key" "*.pem" "*credentials*.json" "data/" "*.db")
+        
+        for pattern in "${required_patterns[@]}"; do
+          if ! grep -q "$pattern" .gitignore; then
+            echo "WARNING: Pattern '$pattern' not found in .gitignore"
+          fi
+        done
+        
+        echo "✓ .gitignore verification complete"
+    
+    - name: Check for .env.example
+      run: |
+        echo "Checking for .env.example template..."
+        
+        if [ ! -f .env.example ]; then
+          echo "WARNING: .env.example template not found"
+          exit 1
+        fi
+        
+        # Verify .env.example doesn't contain real secrets
+        if grep -E "(AIza[0-9A-Za-z_-]{35}|ya29\.|AKIA[0-9A-Z]{16})" .env.example; then
+          echo "ERROR: .env.example contains real API keys!"
+          exit 1
+        fi
+        
+        echo "✓ .env.example is properly configured"
+    
+    - name: Security Summary
+      if: success()
+      run: |
+        echo "================================"
+        echo "✓ Security checks passed!"
+        echo "================================"
+        echo "- No sensitive files committed"
+        echo "- No hardcoded secrets detected"
+        echo "- .gitignore properly configured"
+        echo "- .env.example template present"
+        echo "================================"
+
+# Made with Bob

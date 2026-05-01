@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Create New Blog{% endblock %}
+
+{% block content %}
+<h2>Create New Blog</h2>
+
+{% if error %}
+<div class="alert alert-error">
+    {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+    <form method="post" action="/create">
+        <div class="form-group">
+            <label for="title">Blog Title *</label>
+            <input type="text" id="title" name="title" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description (optional)</label>
+            <textarea id="description" name="description" placeholder="Brief description of your blog..."></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="tags">Tags (comma-separated)</label>
+            <input type="text" id="tags" name="tags" placeholder="technology, AI, programming">
+        </div>
+        
+        <div class="form-group">
+            <label for="publication_site">Publication Site (optional)</label>
+            <select id="publication_site" name="publication_site">
+                <option value="">Select publication site...</option>
+                <option value="medium">Medium</option>
+                <option value="wordpress">WordPress</option>
+                <option value="ghost">Ghost</option>
+                <option value="custom">Custom</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="initial_prompt">Initial Prompt *</label>
+            <textarea id="initial_prompt" name="initial_prompt" required placeholder="Describe what you want your blog to be about. Be specific about the topic, target audience, tone, and any key points you want to cover..."></textarea>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Create Blog</button>
+            <a href="/" class="btn" style="margin-left: 1rem; background: #95a5a6;">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 2rem; background: #ecf0f1;">
+    <h4>Tips for Writing Good Prompts:</h4>
+    <ul style="margin-left: 2rem; margin-top: 1rem;">
+        <li>Be specific about your topic and target audience</li>
+        <li>Mention the desired tone (professional, casual, informative, etc.)</li>
+        <li>Include key points or sections you want covered</li>
+        <li>Specify the approximate length or format you prefer</li>
+        <li>Add any specific requirements or constraints</li>
+    </ul>
+</div>
+{% endblock %}

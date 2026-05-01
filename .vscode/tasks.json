@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start All Services",
+			"type": "shell",
+			"command": "C:/workspace/BLOGWRITER/.venv/Scripts/python.exe -m services.api_gateway.main",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

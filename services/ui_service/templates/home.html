@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Blog Writer - Home{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h2>Your Blogs</h2>
+    <a href="/create" class="btn btn-primary">Create New Blog</a>
+</div>
+
+{% if blogs %}
+    <div class="blog-list">
+        {% for blog in blogs %}
+        <div class="card blog-card">
+            <h3 class="blog-title">{{ blog.title }}</h3>
+            <div class="blog-meta">
+                <span class="status status-{{ blog.status }}">{{ blog.status|replace('_', ' ')|title }}</span>
+                <span style="margin-left: 1rem;">Created: {{ blog.created_at[:10] }}</span>
+                {% if blog.current_version > 0 %}
+                <span style="margin-left: 1rem;">Version: {{ blog.current_version }}</span>
+                {% endif %}
+            </div>
+            {% if blog.description %}
+            <p style="margin-bottom: 1rem; color: #666;">{{ blog.description }}</p>
+            {% endif %}
+            {% if blog.tags %}
+            <div style="margin-bottom: 1rem;">
+                {% for tag in blog.tags %}
+                <span style="background: #ecf0f1; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.5rem;">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="blog-actions">
+                <a href="/blog/{{ blog.id }}" class="btn" style="font-size: 0.9rem; padding: 0.5rem 1rem;">View/Edit</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card" style="text-align: center; padding: 3rem;">
+        <h3 style="color: #666; margin-bottom: 1rem;">No blogs yet</h3>
+        <p style="color: #888; margin-bottom: 2rem;">Create your first blog to get started with AI-powered content generation.</p>
+        <a href="/create" class="btn btn-primary">Create Your First Blog</a>
+    </div>
+{% endif %}
+{% endblock %}

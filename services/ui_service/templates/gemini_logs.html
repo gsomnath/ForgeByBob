@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Gemini API Logs - Blog Writer{% endblock %}
+
+{% block content %}
+<h2>Gemini AI API Logs</h2>
+
+{% if error %}
+<div class="alert alert-error">
+    Error: {{ error }}
+</div>
+{% endif %}
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h4>API Request/Response History</h4>
+        <div>
+            {% if pagination.total_logs %}
+            <span style="color: #666;">
+                Showing {{ ((pagination.current_page - 1) * pagination.page_size + 1) }} - 
+                {% set end_count = pagination.current_page * pagination.page_size %}
+                {% if end_count > pagination.total_logs %}
+                    {{ pagination.total_logs }}
+                {% else %}
+                    {{ end_count }}
+                {% endif %}
+                of {{ pagination.total_logs }} logs
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if logs %}
+    <div style="overflow-x: auto;">
+        {% for log in logs %}
+        <div class="log-entry" style="border: 1px solid #ddd; border-radius: 4px; margin-bottom: 1rem; padding: 1rem;">
+            <div class="log-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-weight: bold;">
+                <div>
+                    <span class="status {% if log.success %}status-completed{% else %}status-error{% endif %}">
+                        {% if log.success %}✓ Success{% else %}✗ Failed{% endif %}
+                    </span>
+                    {% if log.blog_id %}
+                    <span style="margin-left: 1rem; color: #666;">Blog: {{ log.blog_id[:8] }}...</span>
+                    {% endif %}
+                </div>
+                <div style="color: #666; font-size: 0.9rem;">
+                    {{ log.request_timestamp[:19] }}
+                    {% if log.processing_time_ms %}
+                    <span style="margin-left: 1rem;">({{ log.processing_time_ms }}ms)</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="log-content">
+                <div style="margin-bottom: 1rem;">
+                    <strong>Model:</strong> {{ log.model_used }}
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <strong>Request Prompt:</strong>
+                    <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; white-space: pre-wrap; max-height: 100px; overflow-y: auto;">{{ log.prompt }}</div>
+                </div>
+
+                {% if log.success and log.response_content %}
+                <div style="margin-bottom: 1rem;">
+                    <strong>Response:</strong>
+                    <div style="background: #e8f5e8; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; white-space: pre-wrap; max-height: 150px; overflow-y: auto;">{{ log.response_content }}</div>
+                </div>
+                {% endif %}
+
+                {% if not log.success and log.error_message %}
+                <div style="margin-bottom: 1rem;">
+                    <strong>Error:</strong>
+                    <div style="background: #ffe6e6; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem; color: #d32f2f;">{{ log.error_message }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination.total_pages and pagination.total_pages > 1 %}
+    <div style="display: flex; justify-content: center; align-items: center; margin-top: 2rem; gap: 0.5rem;">
+        {% if pagination.has_prev %}
+        <a href="/gemini-logs?page={{ pagination.current_page - 1 }}" class="btn" style="background: #95a5a6;">Previous</a>
+        {% endif %}
+
+        {% set start_page = pagination.current_page - 2 %}
+        {% if start_page < 1 %}{% set start_page = 1 %}{% endif %}
+        
+        {% set end_page = pagination.current_page + 2 %}
+        {% if end_page > pagination.total_pages %}{% set end_page = pagination.total_pages %}{% endif %}
+        
+        {% for page_num in range(start_page, end_page + 1) %}
+        <a href="/gemini-logs?page={{ page_num }}" 
+           class="btn {% if page_num == pagination.current_page %}btn-primary{% else %}btn-secondary{% endif %}"
+           style="{% if page_num != pagination.current_page %}background: #ecf0f1; color: #2c3e50;{% endif %}">
+            {{ page_num }}
+        </a>
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <a href="/gemini-logs?page={{ pagination.current_page + 1 }}" class="btn" style="background: #95a5a6;">Next</a>
+        {% endif %}
+    </div>
+
+    <div style="text-align: center; margin-top: 1rem; color: #666; font-size: 0.9rem;">
+        Page {{ pagination.current_page }} of {{ pagination.total_pages }}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: #666;">
+        <h4>No API logs found</h4>
+        <p>Generate some blog content using Gemini AI to see logs here.</p>
+        <a href="/create" class="btn btn-primary">Create a Blog</a>
+    </div>
+    {% endif %}
+</div>
+
+<div style="margin-top: 2rem; text-align: center;">
+    <a href="/" class="btn" style="background: #95a5a6;">Back to Home</a>
+</div>
+
+<style>
+.log-entry:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-error {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+.btn-secondary {
+    background: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+}
+
+.btn-secondary:hover {
+    background: #d5dbdb;
+}
+</style>
+{% endblock %}

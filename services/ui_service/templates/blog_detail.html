@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block title %}{{ blog.title }} - Blog Writer{% endblock %}
+
+{% block content %}
+<!-- Success/Error Messages -->
+{% set success_msg = request.query_params.get('success') %}
+{% set error_msg = request.query_params.get('error') %}
+
+{% if success_msg %}
+<div style="background: #d4edda; color: #155724; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #c3e6cb;">
+    ✓ {{ success_msg }}
+</div>
+{% endif %}
+
+{% if error_msg %}
+<div style="background: #f8d7da; color: #721c24; padding: 1rem; border-radius: 4px; margin-bottom: 1rem; border: 1px solid #f5c6cb;">
+    ✗ {{ error_msg }}
+</div>
+{% endif %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h2>{{ blog.title }}</h2>
+        <div class="blog-meta">
+            <span class="status status-{{ blog.status }}">{{ blog.status|replace('_', ' ')|title }}</span>
+            <span style="margin-left: 1rem;">Created: {{ blog.created_at[:10] }}</span>
+            {% if blog.current_version > 0 %}
+            <span style="margin-left: 1rem;">Current Version: {{ blog.current_version }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <a href="/" class="btn" style="background: #95a5a6;">Back to Home</a>
+</div>
+
+{% if blog.description %}
+<div class="card">
+    <h4>Description</h4>
+    <p>{{ blog.description }}</p>
+</div>
+{% endif %}
+
+<!-- Latest Content -->
+{% if blog.latest_content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h4>Latest Content (Version {{ blog.current_version }})</h4>
+        <div style="display: flex; gap: 0.5rem;">
+            <button onclick="copyContentForMedium()" class="btn" style="background: #2ecc71; color: white;" title="Copy formatted content for Medium/blogs">
+                Copy for Medium
+            </button>
+            <button onclick="copyMarkdownContent()" class="btn" style="background: #9b59b6; color: white;" title="Copy raw markdown">
+                Copy Markdown
+            </button>
+            <button onclick="toggleEditMode()" class="btn" style="background: #f39c12; color: white;" id="edit-toggle-btn">
+                Edit Content
+            </button>
+        </div>
+    </div>
+    
+    <!-- Display Mode -->
+    <div id="content-display" style="background: #f8f9fa; padding: 1.5rem; border-radius: 4px; max-height: 400px; overflow-y: auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; border-left: 4px solid #27ae60;">
+        <div id="rendered-content"></div>
+    </div>
+    
+    <!-- Hidden content storage for JavaScript with proper escaping -->
+    <textarea id="blog-content-data" style="display: none;">{{ blog.latest_content }}</textarea>
+    
+    <!-- Edit Mode -->
+    <div id="content-edit" style="display: none;">
+        <form method="post" action="/blog/{{ blog.id }}/content" id="content-form">
+            <div class="form-group">
+                <textarea id="content-editor" name="content" style="width: 100%; min-height: 400px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 1rem; border: 1px solid #ddd; border-radius: 4px;">{{ blog.latest_content }}</textarea>
+            </div>
+            <div style="margin-top: 1rem;">
+                <button type="submit" class="btn btn-success">Save Content</button>
+                <button type="button" onclick="cancelEdit()" class="btn" style="background: #95a5a6; margin-left: 0.5rem;">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <h4>Latest Content</h4>
+    <p style="color: #666;">No content available yet. Generate your first content below.</p>
+</div>
+{% endif %}
+
+<!-- Generate Content Section -->
+<div class="card">
+    <h4>Generate New Content</h4>
+    <form method="post" action="/blog/{{ blog.id }}/generate">
+        <div class="form-group">
+            <label for="prompt">Prompt for AI Generation</label>
+            <textarea id="prompt" name="prompt" required placeholder="Describe what you want to generate or modify in your blog content..."></textarea>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="submit" name="generation_type" value="all" class="btn btn-success">Generate All Content</button>
+            <button type="submit" name="generation_type" value="text" class="btn btn-primary">Generate Text</button>
+            <button type="submit" name="generation_type" value="images" class="btn btn-info">Generate Images</button>
+        </div>
+    </form>
+</div>
+
+<!-- Blog Versions -->
+{% if versions %}
+<div class="card">
+    <h4>Content Versions</h4>
+    <div style="max-height: 600px; overflow-y: auto;">
+        {% for version in versions %}
+        <div style="border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div>
+                    <strong>Version {{ version.version }}</strong>
+                    {% if version.version == blog.current_version %}
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">CURRENT</span>
+                    {% endif %}
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="color: #666; font-size: 0.9rem;">{{ version.created_at[:19] if version.created_at else 'Unknown' }}</span>
+                    <button onclick="toggleContent({{ version.version }})" class="btn" style="background: #3498db; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                        <span id="toggle-text-{{ version.version }}">Show Content</span>
+                    </button>
+                    <button onclick="copyVersionContent({{ version.version }})" class="btn" style="background: #9b59b6; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;" title="Copy this version">
+                        Copy
+                    </button>
+                    {% if version.version != blog.current_version %}
+                    <button onclick="confirmDelete({{ version.version }})" class="btn" style="background: #e74c3c; color: white; padding: 0.25rem 0.5rem; font-size: 0.8rem;" title="Delete this version">
+                        Delete
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="content-{{ version.version }}" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 4px; max-height: 300px; overflow-y: auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;">
+                <div style="text-align: center; color: #666;">Loading content...</div>
+            </div>
+            <div style="color: #666; font-size: 0.9rem; margin-top: 0.5rem; display: flex; justify-content: space-between;">
+                <span>Size: {{ version.size }} bytes</span>
+                {% if version.version != blog.current_version %}
+                <span style="color: #e74c3c; font-size: 0.8rem;">⚠️ Can be deleted</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <h4>Content Versions</h4>
+    <p style="color: #666;">No content versions yet. Generate your first version above.</p>
+</div>
+{% endif %}
+
+<script>
+// Function to render markdown content with images
+function renderMarkdownContent(content) {
+    if (!content) return '';
+    
+    let renderedContent = content;
+    
+    // Convert markdown images to HTML images with fallback
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    renderedContent = renderedContent.replace(imageRegex, (match, altText, url) => {
+        const randomId = Math.floor(Math.random() * 1000);
+        const fallbackUrl = `https://picsum.photos/600/400?random=${randomId}`;
+        const svgFallback = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="#f0f0f0"/><text x="50%" y="50%" font-family="Arial" font-size="20" fill="#666" text-anchor="middle" dy=".3em">${altText || 'Image'}</text></svg>`)}`;
+        
+        return `<img src="${url.trim()}" alt="${altText}" 
+                style="max-width: 100%; height: auto; margin: 1rem 0; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: block;" 
+                onerror="if(this.src!=='${fallbackUrl}') { this.src='${fallbackUrl}'; } else { this.src='${svgFallback}'; }">`;
+    });
+    
+    // Convert markdown headers
+    renderedContent = renderedContent.replace(/^### (.*$)/gim, '<h3 style="color: #2c3e50; margin-top: 1.5rem; margin-bottom: 0.5rem;">$1</h3>');
+    renderedContent = renderedContent.replace(/^## (.*$)/gim, '<h2 style="color: #2c3e50; margin-top: 1.5rem; margin-bottom: 0.5rem;">$1</h2>');
+    renderedContent = renderedContent.replace(/^# (.*$)/gim, '<h1 style="color: #2c3e50; margin-top: 1.5rem; margin-bottom: 0.5rem;">$1</h1>');
+    
+    // Convert markdown bold and italic
+    renderedContent = renderedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    renderedContent = renderedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Convert markdown bullet points (handle multiline lists better)
+    const lines = renderedContent.split('\n');
+    let inList = false;
+    let processedLines = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.match(/^- /)) {
+            if (!inList) {
+                processedLines.push('<ul style="margin: 0.5rem 0; padding-left: 1.5rem;">');
+                inList = true;
+            }
+            processedLines.push('<li style="margin-bottom: 0.25rem;">' + line.substring(2) + '</li>');
+        } else {
+            if (inList) {
+                processedLines.push('</ul>');
+                inList = false;
+            }
+            processedLines.push(line);
+        }
+    }
+    
+    if (inList) {
+        processedLines.push('</ul>');
+    }
+    
+    renderedContent = processedLines.join('\n');
+    
+    // Convert line breaks to paragraphs (improved handling)
+    const paragraphs = renderedContent.split('\n\n');
+    renderedContent = paragraphs.map(p => {
+        const trimmed = p.trim();
+        if (trimmed && !trimmed.includes('<h') && !trimmed.includes('<img') && !trimmed.includes('<ul') && !trimmed.includes('<li')) {
+            // Handle single line breaks within paragraphs
+            const withBreaks = trimmed.replace(/\n/g, '<br>');
+            return `<p style="margin-bottom: 1rem; line-height: 1.6;">${withBreaks}</p>`;
+        }
+        return trimmed;
+    }).join('\n\n');
+    
+    return renderedContent;
+}
+
+// Initialize content rendering when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    const contentDiv = document.getElementById('rendered-content');
+    const contentElement = document.getElementById('blog-content-data');
+    
+    if (contentElement) {
+        const originalContent = contentElement.value;
+        
+        if (originalContent && originalContent.trim() !== '') {
+            const renderedHTML = renderMarkdownContent(originalContent);
+            contentDiv.innerHTML = renderedHTML;
+        } else {
+            contentDiv.innerHTML = '<p style="color: #666;">No content available</p>';
+        }
+    } else {
+        contentDiv.innerHTML = '<p style="color: #666;">Content element not found</p>';
+    }
+});
+
+let isEditMode = false;
+
+// Copy functions for content sharing
+function copyContentForMedium() {
+    const contentElement = document.getElementById('blog-content-data');
+    
+    if (!contentElement) {
+        alert('No content to copy');
+        return;
+    }
+    
+    const originalContent = contentElement.value;
+    
+    // Convert markdown to Medium-friendly format
+    let mediumContent = originalContent;
+    
+    // Keep images as markdown - Medium supports markdown images
+    // No changes needed for images as Medium editor accepts ![alt](url) format
+    
+    // Headers - Medium uses # for headers, keep as-is
+    // Bold and italic - Medium uses ** and *, keep as-is
+    
+    // Add some formatting notes for user
+    const copyText = `${mediumContent}
+
+---
+📝 Note: This content includes images and is formatted for Medium. 
+- Images will render automatically when pasted into Medium editor
+- All formatting (headers, bold, italic) is preserved
+- Copy this entire text including the images`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(copyText).then(() => {
+        showCopyMessage('Content copied for Medium! Paste directly into Medium editor - images will render automatically.');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy content');
+    });
+}
+
+function copyMarkdownContent() {
+    const contentElement = document.getElementById('blog-content-data');
+    
+    if (!contentElement) {
+        alert('No content to copy');
+        return;
+    }
+    
+    const originalContent = contentElement.value;
+    
+    // Copy raw markdown
+    navigator.clipboard.writeText(originalContent).then(() => {
+        showCopyMessage('Markdown content copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+        alert('Failed to copy content');
+    });
+}
+
+function showCopyMessage(message) {
+    // Create a temporary message
+    const messageDiv = document.createElement('div');
+    messageDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #27ae60;
+        color: white;
+        padding: 1rem;
+        border-radius: 4px;
+        z-index: 1000;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    `;
+    messageDiv.textContent = message;
+    document.body.appendChild(messageDiv);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        document.body.removeChild(messageDiv);
+    }, 3000);
+}
+
+async function copyVersionContent(version) {
+    try {
+        const response = await fetch(`/api/blogs/{{ blog.id }}/versions/${version}/content`);
+        const data = await response.json();
+        
+        if (data.success && data.data && data.data.content) {
+            navigator.clipboard.writeText(data.data.content).then(() => {
+                showCopyMessage(`Version ${version} content copied to clipboard!`);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy content');
+            });
+        } else {
+            alert('Failed to load content for copying');
+        }
+    } catch (error) {
+        console.error('Error loading content: ', error);
+        alert('Error loading content for copying');
+    }
+}
+
+function toggleEditMode() {
+    const displayDiv = document.getElementById('content-display');
+    const editDiv = document.getElementById('content-edit');
+    const toggleBtn = document.getElementById('edit-toggle-btn');
+    
+    if (!isEditMode) {
+        // Enter edit mode
+        displayDiv.style.display = 'none';
+        editDiv.style.display = 'block';
+        toggleBtn.textContent = 'Cancel Edit';
+        toggleBtn.style.background = '#e74c3c';
+        isEditMode = true;
+    } else {
+        // Exit edit mode
+        displayDiv.style.display = 'block';
+        editDiv.style.display = 'none';
+        toggleBtn.textContent = 'Edit Content';
+        toggleBtn.style.background = '#f39c12';
+        isEditMode = false;
+    }
+}
+
+function cancelEdit() {
+    // Reset the textarea to original content and exit edit mode
+    const originalContent = document.getElementById('content-display').textContent;
+    document.getElementById('content-editor').value = originalContent;
+    toggleEditMode();
+}
+
+function confirmDelete(version) {
+    if (confirm(`Are you sure you want to delete Version ${version}? This action cannot be undone.`)) {
+        // Create and submit a hidden form for deletion
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/blog/{{ blog.id }}/versions/${version}/delete`;
+        form.style.display = 'none';
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+async function toggleContent(version) {
+    const contentDiv = document.getElementById(`content-${version}`);
+    const toggleText = document.getElementById(`toggle-text-${version}`);
+    
+    if (contentDiv.style.display === 'none') {
+        // Show content
+        contentDiv.style.display = 'block';
+        toggleText.textContent = 'Hide Content';
+        
+        // Load content if not already loaded
+        if (contentDiv.innerHTML.includes('Loading content...')) {
+            try {
+                const response = await fetch(`/api/blogs/{{ blog.id }}/versions/${version}/content`);
+                const data = await response.json();
+                
+                if (data.success && data.data && data.data.content) {
+                    contentDiv.innerHTML = renderMarkdownContent(data.data.content);
+                } else {
+                    contentDiv.innerHTML = '<div style="color: #d32f2f;">Failed to load content</div>';
+                }
+            } catch (error) {
+                contentDiv.innerHTML = '<div style="color: #d32f2f;">Error loading content: ' + error.message + '</div>';
+            }
+        }
+    } else {
+        // Hide content
+        contentDiv.style.display = 'none';
+        toggleText.textContent = 'Show Content';
+    }
+}
+</script>
+
+<!-- Comments and Feedback -->
+<div class="card">
+    <h4>Comments and Feedback</h4>
+    
+    <!-- Add Comment Form -->
+    <form method="post" action="/blog/{{ blog.id }}/comment" style="margin-bottom: 2rem;">
+        <div class="form-group">
+            <label for="content">Comment</label>
+            <textarea id="content" name="content" required placeholder="Add your feedback or comments..."></textarea>
+        </div>
+        <div class="form-group">
+            <label for="requested_changes">Requested Changes (optional)</label>
+            <textarea id="requested_changes" name="requested_changes" placeholder="Specific changes you'd like to see in the next version..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Comment</button>
+    </form>
+    
+    <!-- Comments List -->
+    {% if comments %}
+        {% for comment in comments %}
+        <div style="border-left: 4px solid #3498db; padding-left: 1rem; margin-bottom: 1.5rem;">
+            <div style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                {{ comment.created_at[:16] if comment.created_at else 'Unknown time' }}
+            </div>
+            <div style="margin-bottom: 0.5rem;">{{ comment.content }}</div>
+            {% if comment.requested_changes %}
+            <div style="background: #fff3cd; padding: 0.5rem; border-radius: 4px; font-size: 0.9rem;">
+                <strong>Requested Changes:</strong> {{ comment.requested_changes }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <p style="color: #666;">No comments yet. Add the first comment above.</p>
+    {% endif %}
+</div>
+
+{% if blog.tags %}
+<div class="card">
+    <h4>Tags</h4>
+    <div>
+        {% for tag in blog.tags %}
+        <span style="background: #ecf0f1; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.9rem; margin-right: 0.5rem;">{{ tag }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Check for URL parameters to show messages
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('error')) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'alert alert-error';
+    errorDiv.textContent = urlParams.get('error');
+    document.querySelector('.container').insertBefore(errorDiv, document.querySelector('.container').firstChild);
+}
+if (urlParams.get('success')) {
+    const successDiv = document.createElement('div');
+    successDiv.className = 'alert alert-success';
+    successDiv.textContent = 'Operation completed successfully!';
+    document.querySelector('.container').insertBefore(successDiv, document.querySelector('.container').firstChild);
+}
+</script>
+{% endblock %}
