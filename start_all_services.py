@@ -10,6 +10,12 @@ import socket
 import psutil
 from pathlib import Path
 
+# Constants
+SERVICE_START_DELAY = 1  # seconds between service starts
+SERVICE_STARTUP_TIME = 3  # seconds to wait for service initialization
+PORT_RELEASE_TIMEOUT = 10  # seconds to wait for port release
+PROCESS_TERMINATION_TIMEOUT = 5  # seconds to wait for graceful termination
+
 def is_port_in_use(port):
     """Check if a port is in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -53,7 +59,7 @@ def stop_all_python_services():
     # Wait for processes to terminate
     time.sleep(3)
 
-def wait_for_port_release(port, timeout=10):
+def wait_for_port_release(port, timeout=PORT_RELEASE_TIMEOUT):
     """Wait for a port to be released."""
     print(f"  Waiting for port {port} to be released...")
     start_time = time.time()
@@ -91,7 +97,7 @@ def start_service(service_name, port):
         ], cwd=Path(__file__).parent)
         
         # Give the service time to start
-        time.sleep(3)
+        time.sleep(SERVICE_STARTUP_TIME)
         
         # Verify the service started
         if is_port_in_use(port):
@@ -105,28 +111,17 @@ def start_service(service_name, port):
         print(f"[ERROR] Failed to start {service_name}: {e}")
         return None
 
-def main():
-    """Start all services."""
-    print("=== Blog Writer Application Startup ===\n")
-    
-    # First, stop all existing services
-    stop_all_python_services()
-    
-    services = [
-        ("settings_service", 8002),
-        ("api_gateway", 8000),
-        ("blog_service", 8001),
-        ("ui_service", 8003),
-    ]
-    
-    # Verify all ports are free
+def verify_ports_available(services):
+    """Verify all required ports are available."""
     print("\n=== Checking Ports ===")
     for service_name, port in services:
         if is_port_in_use(port):
             print(f"[WARNING] Port {port} ({service_name}) is still in use")
             kill_process_on_port(port)
             wait_for_port_release(port)
-    
+
+def start_all_services(services):
+    """Start all services and return their processes."""
     print("\n=== Starting Services ===")
     processes = []
     
@@ -134,32 +129,66 @@ def main():
         process = start_service(service_name, port)
         if process:
             processes.append((service_name, process))
-        time.sleep(1)  # Stagger service starts
+        time.sleep(SERVICE_START_DELAY)  # Stagger service starts to avoid port conflicts
     
+    return processes
+
+def display_service_urls(services):
+    """Display URLs for all running services."""
     print("\n=== All Services Started ===")
-    print("Settings Service: http://localhost:8002")
-    print("API Gateway: http://localhost:8000")
-    print("Blog Service: http://localhost:8001")
-    print("UI Service: http://localhost:8003")
+    for service_name, port in services:
+        # Format service name for display
+        display_name = service_name.replace('_', ' ').title()
+        print(f"{display_name}: http://localhost:{port}")
+    
+    # Special case for web interface
     print("Web Interface: http://localhost:8003")
     print("\nPress Ctrl+C to stop all services...")
+
+def cleanup_services(processes):
+    """Gracefully stop all service processes."""
+    print("\n=== Stopping Services ===")
+    for service_name, process in processes:
+        try:
+            process.terminate()
+            process.wait(timeout=PROCESS_TERMINATION_TIMEOUT)
+            print(f"[OK] Stopped {service_name}")
+        except subprocess.TimeoutExpired:
+            process.kill()
+            print(f"[OK] Force stopped {service_name}")
+        except Exception as e:
+            print(f"[ERROR] Error stopping {service_name}: {e}")
+
+def main():
+    """Start all services."""
+    print("=== Blog Writer Application Startup ===\n")
     
+    # Stop existing services
+    stop_all_python_services()
+    
+    # Define services configuration
+    services = [
+        ("settings_service", 8002),
+        ("api_gateway", 8000),
+        ("blog_service", 8001),
+        ("ui_service", 8003),
+    ]
+    
+    # Verify ports are available
+    verify_ports_available(services)
+    
+    # Start all services
+    processes = start_all_services(services)
+    
+    # Display service information
+    display_service_urls(services)
+    
+    # Wait for shutdown signal
     try:
-        # Keep the script running
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n=== Stopping Services ===")
-        for service_name, process in processes:
-            try:
-                process.terminate()
-                process.wait(timeout=5)
-                print(f"[OK] Stopped {service_name}")
-            except subprocess.TimeoutExpired:
-                process.kill()
-                print(f"[OK] Force stopped {service_name}")
-            except Exception as e:
-                print(f"[ERROR] Failed to stop {service_name}: {e}")
+        cleanup_services(processes)
 
 if __name__ == "__main__":
     main()

@@ -95,19 +95,24 @@ class GraniteClient:
             
             if params:
                 # Create temporary model with custom params
-                temp_model = ModelInference(
-                    model_id=self.config.model_id,
-                    params={
-                        GenParams.MAX_NEW_TOKENS: params.get(GenParams.MAX_NEW_TOKENS, self.config.max_new_tokens),
-                        GenParams.TEMPERATURE: params.get(GenParams.TEMPERATURE, self.config.temperature),
-                        GenParams.TOP_P: self.config.top_p,
-                        GenParams.TOP_K: self.config.top_k,
-                        GenParams.REPETITION_PENALTY: self.config.repetition_penalty,
-                    },
-                    credentials={"apikey": self.config.api_key, "url": self.config.url},
-                    project_id=self.config.project_id
-                )
-                response = temp_model.generate_text(prompt=full_prompt)
+                try:
+                    temp_model = ModelInference(
+                        model_id=self.config.model_id,
+                        params={
+                            GenParams.MAX_NEW_TOKENS: params.get(GenParams.MAX_NEW_TOKENS, self.config.max_new_tokens),
+                            GenParams.TEMPERATURE: params.get(GenParams.TEMPERATURE, self.config.temperature),
+                            GenParams.TOP_P: self.config.top_p,
+                            GenParams.TOP_K: self.config.top_k,
+                            GenParams.REPETITION_PENALTY: self.config.repetition_penalty,
+                        },
+                        credentials={"apikey": self.config.api_key, "url": self.config.url},
+                        project_id=self.config.project_id,
+                        verify=False  # Disable SSL verification if needed
+                    )
+                    response = temp_model.generate_text(prompt=full_prompt)
+                except Exception as e:
+                    logger.error(f"Failed to create temporary model with custom params: {str(e)}")
+                    raise
             else:
                 response = self.model.generate_text(prompt=full_prompt)
             

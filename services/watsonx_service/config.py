@@ -35,7 +35,7 @@ class GraniteConfig(BaseModel):
             api_key=os.getenv("IBM_CLOUD_API_KEY", ""),
             project_id=os.getenv("WATSONX_PROJECT_ID", ""),
             url=os.getenv("WATSONX_URL", "https://us-south.ml.cloud.ibm.com"),
-            model_id=os.getenv("WATSONX_MODEL_ID", "ibm/granite-3-8b-instruct")
+            model_id=os.getenv("WATSONX_MODEL_ID", "ibm/granite-4-h-small")
         )
     
     def validate_credentials(self) -> bool:

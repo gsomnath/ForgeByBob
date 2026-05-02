@@ -9,6 +9,7 @@ import json
 import base64
 import hashlib
 import uuid
+import asyncio
 from datetime import datetime, timezone
 
 # Add the project root to the Python path
@@ -629,11 +630,49 @@ async def update_blog_content(blog_id: str, content_data: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+async def _update_blog_to_highest_version(
+    blog: Blog, 
+    final_folder: Path, 
+    deleted_version: int
+) -> None:
+    """Update blog to highest remaining version after deletion.
+    
+    Args:
+        blog: Blog object to update
+        final_folder: Path to the final versions folder
+        deleted_version: Version number that was deleted
+    """
+    remaining_versions = list_blog_versions(blog.folder_path)
+    if not remaining_versions:
+        return
+    
+    highest_version = max(v["version"] for v in remaining_versions)
+    
+    # Only update if current version is higher than highest remaining
+    if blog.current_version > highest_version:
+        blog.current_version = highest_version
+        
+        # Load content from highest remaining version
+        highest_version_file = final_folder / f"v{highest_version}.md"
+        try:
+            content = await asyncio.to_thread(
+                read_file_content, 
+                str(highest_version_file)
+            )
+            blog.latest_content = content
+        except Exception as e:
+            print(f"Warning: Could not load content from v{highest_version}: {e}")
+        
+        blog.updated_at = get_current_timestamp()
+        save_blogs_to_file()
+
+
 
 @app.delete("/blogs/{blog_id}/versions/{version_num}", response_model=APIResponse)
 async def delete_blog_version(blog_id: str, version_num: int):
     """Delete a specific blog version."""
     try:
+        # Validate blog exists
         if blog_id not in blogs_db:
             raise HTTPException(status_code=404, detail="Blog not found")
         
@@ -641,36 +680,30 @@ async def delete_blog_version(blog_id: str, version_num: int):
         final_folder = Path(blog.folder_path) / "final"
         version_file = final_folder / f"v{version_num}.md"
         
-        if not version_file.exists():
+        # Validate version exists
+        if not await asyncio.to_thread(version_file.exists):
             raise HTTPException(status_code=404, detail="Version not found")
         
-        # Don't allow deleting the current/latest version
+        # Prevent deleting current version
         if version_num == blog.current_version:
-            raise HTTPException(status_code=400, detail="Cannot delete the current version. Please create a new version first.")
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the current version. Please create a new version first."
+            )
         
-        # Delete the version file
-        version_file.unlink()
+        # Delete version file asynchronously
+        await asyncio.to_thread(version_file.unlink)
         
-        # If this was the latest content and we're deleting it, update to the highest remaining version
-        remaining_versions = list_blog_versions(blog.folder_path)
-        if remaining_versions:
-            # Find the highest version number
-            highest_version = max(v["version"] for v in remaining_versions)
-            if blog.current_version == version_num or blog.current_version > highest_version:
-                # Update to the highest remaining version
-                blog.current_version = highest_version
-                # Load the content from the highest remaining version
-                highest_version_file = final_folder / f"v{highest_version}.md"
-                if highest_version_file.exists():
-                    with open(highest_version_file, 'r', encoding='utf-8') as f:
-                        blog.latest_content = f.read()
-                blog.updated_at = get_current_timestamp()
-                save_blogs_to_file()
+        # Update blog to highest remaining version if needed
+        await _update_blog_to_highest_version(blog, final_folder, version_num)
         
         return APIResponse(
             success=True,
             message=f"Version {version_num} deleted successfully",
-            data={"deleted_version": version_num, "current_version": blog.current_version}
+            data={
+                "deleted_version": version_num,
+                "current_version": blog.current_version
+            }
         )
         
     except HTTPException:
