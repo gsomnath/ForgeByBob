@@ -87,9 +87,9 @@ pythonenv*/
 # =============================================================================
 # IDE / Editor
 # =============================================================================
-# Allow settings.json for Bobalytics configuration
-!.vscode/settings.json
 .vscode/*.json
+# Allow specific files for Bobalytics and development
+!.vscode/settings.json
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/tasks.json
