@@ -1,6 +1,6 @@
-# Gemini AI-Powered Blog Application
+# IBM WatsonX AI-Powered Blog Application
 
-A microservice-based blog content generation application powered by Google's Gemini AI.
+A microservice-based blog content generation application powered by IBM WatsonX and Granite models.
 
 ## Architecture
 
@@ -20,7 +20,7 @@ This application follows microservice architecture principles with the following
 
 ### Blog Service (Port 8001)
 - Blog content creation and management
-- Gemini AI integration for content generation
+- IBM WatsonX AI integration for content generation with Granite models
 - File and folder management for blog projects
 - Versioning system for blog drafts
 
@@ -39,7 +39,8 @@ This application follows microservice architecture principles with the following
 
 ### Prerequisites
 - Python 3.11+
-- Google Gemini AI API key
+- IBM Cloud account with WatsonX.ai access
+- IBM Cloud API key
 
 ### Installation
 
@@ -64,7 +65,8 @@ cp .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 # Edit .env and add your actual values:
-# - GEMINI_API_KEY: Get from https://makersuite.google.com/app/apikey
+# - IBM_CLOUD_API_KEY: Get from IBM Cloud console
+# - WATSONX_PROJECT_ID: Your WatsonX project ID
 # - SECRET_KEY: Use the generated key from above
 # - Other settings: Adjust as needed
 ```
@@ -104,7 +106,7 @@ BLOGWRITER/
 ## Features
 
 - **Blog Creation**: Create new blog projects with organized folder structure
-- **AI Content Generation**: Leverage Gemini AI for content creation and updates
+- **AI Content Generation**: Leverage IBM WatsonX and Granite models for content creation and updates
 - **Version Management**: Track and manage different versions of blog drafts
 - **Reference Management**: Store and organize reference materials
 - **Multi-platform Publishing**: Configure publication to different platforms

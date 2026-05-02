@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Gemini API Logs - Blog Writer{% endblock %}
+{% block title %}IBM watsonx.ai API Logs - Blog Writer{% endblock %}
 
 {% block content %}
-<h2>Gemini AI API Logs</h2>
+<h2>IBM watsonx.ai API Logs</h2>
 
 {% if error %}
 <div class="alert alert-error">
@@ -83,7 +83,7 @@
     {% if pagination.total_pages and pagination.total_pages > 1 %}
     <div style="display: flex; justify-content: center; align-items: center; margin-top: 2rem; gap: 0.5rem;">
         {% if pagination.has_prev %}
-        <a href="/gemini-logs?page={{ pagination.current_page - 1 }}" class="btn" style="background: #95a5a6;">Previous</a>
+        <a href="/watsonx-logs?page={{ pagination.current_page - 1 }}" class="btn" style="background: #95a5a6;">Previous</a>
         {% endif %}
 
         {% set start_page = pagination.current_page - 2 %}
@@ -93,7 +93,7 @@
         {% if end_page > pagination.total_pages %}{% set end_page = pagination.total_pages %}{% endif %}
         
         {% for page_num in range(start_page, end_page + 1) %}
-        <a href="/gemini-logs?page={{ page_num }}" 
+        <a href="/watsonx-logs?page={{ page_num }}" 
            class="btn {% if page_num == pagination.current_page %}btn-primary{% else %}btn-secondary{% endif %}"
            style="{% if page_num != pagination.current_page %}background: #ecf0f1; color: #2c3e50;{% endif %}">
             {{ page_num }}
@@ -101,7 +101,7 @@
         {% endfor %}
 
         {% if pagination.has_next %}
-        <a href="/gemini-logs?page={{ pagination.current_page + 1 }}" class="btn" style="background: #95a5a6;">Next</a>
+        <a href="/watsonx-logs?page={{ pagination.current_page + 1 }}" class="btn" style="background: #95a5a6;">Next</a>
         {% endif %}
     </div>
 
@@ -113,7 +113,7 @@
     {% else %}
     <div style="text-align: center; padding: 2rem; color: #666;">
         <h4>No API logs found</h4>
-        <p>Generate some blog content using Gemini AI to see logs here.</p>
+        <p>Generate some blog content using IBM watsonx.ai to see logs here.</p>
         <a href="/create" class="btn btn-primary">Create a Blog</a>
     </div>
     {% endif %}

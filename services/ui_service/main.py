@@ -307,37 +307,29 @@ async def settings_page(request: Request):
 @app.post("/settings")
 async def update_settings(
     request: Request,
-    gemini_api_key: str = Form(""),
+    ibm_cloud_api_key: str = Form(""),
+    watsonx_project_id: str = Form(""),
+    watsonx_url: str = Form("https://us-south.ml.cloud.ibm.com"),
+    watsonx_model_id: str = Form("meta-llama/llama-3-3-70b-instruct"),
     source_folder: str = Form(""),
-    default_publication_site: str = Form(""),
-    google_cloud_project: str = Form(""),
-    google_cloud_location: str = Form("us-central1"),
-    google_cloud_credentials_path: str = Form(""),
-    imagen_enabled: bool = Form(False),
-    imagen_model: str = Form("imagen-3")
+    default_publication_site: str = Form("")
 ):
     """Update settings."""
     try:
         settings_data = {}
         
-        if gemini_api_key:
-            settings_data["gemini_api_key"] = gemini_api_key
+        if ibm_cloud_api_key:
+            settings_data["ibm_cloud_api_key"] = ibm_cloud_api_key
+        if watsonx_project_id:
+            settings_data["watsonx_project_id"] = watsonx_project_id
+        if watsonx_url:
+            settings_data["watsonx_url"] = watsonx_url
+        if watsonx_model_id:
+            settings_data["watsonx_model_id"] = watsonx_model_id
         if source_folder:
             settings_data["source_folder"] = source_folder
         if default_publication_site:
             settings_data["default_publication_site"] = default_publication_site
-        
-        # Handle Google Cloud Imagen settings
-        if google_cloud_project:
-            settings_data["google_cloud_project"] = google_cloud_project
-        if google_cloud_location:
-            settings_data["google_cloud_location"] = google_cloud_location
-        if google_cloud_credentials_path:
-            settings_data["google_cloud_credentials_path"] = google_cloud_credentials_path
-        
-        # Always include boolean and string fields (even if default values)
-        settings_data["imagen_enabled"] = imagen_enabled
-        settings_data["imagen_model"] = imagen_model
         
         async with httpx.AsyncClient() as client:
             response = await client.put(
@@ -352,14 +344,14 @@ async def update_settings(
     except Exception as e:
         return RedirectResponse(url=f"/settings?error={str(e)}", status_code=303)
 
-@app.get("/gemini-logs", response_class=HTMLResponse)
-async def gemini_logs_page(request: Request, page: int = 1):
-    """Gemini API logs page with pagination."""
+@app.get("/watsonx-logs", response_class=HTMLResponse)
+async def watsonx_logs_page(request: Request, page: int = 1):
+    """WatsonX API logs page with pagination."""
     try:
-        # Fetch Gemini logs from blog service
+        # Fetch WatsonX logs from blog service
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"http://localhost:{settings.blog_service_port}/gemini-logs?page={page}&page_size=10"
+                f"http://localhost:{settings.blog_service_port}/watsonx-logs?page={page}&page_size=10"
             )
             
             logs_data = []
@@ -371,13 +363,13 @@ async def gemini_logs_page(request: Request, page: int = 1):
                     logs_data = data.get("data", {}).get("logs", [])
                     pagination = data.get("data", {}).get("pagination", {})
             
-            return templates.TemplateResponse("gemini_logs.html", {
+            return templates.TemplateResponse("watsonx_logs.html", {
                 "request": request,
                 "logs": logs_data,
                 "pagination": pagination
             })
     except Exception as e:
-        return templates.TemplateResponse("gemini_logs.html", {
+        return templates.TemplateResponse("watsonx_logs.html", {
             "request": request,
             "error": str(e),
             "logs": [],
@@ -386,28 +378,21 @@ async def gemini_logs_page(request: Request, page: int = 1):
 
 @app.get("/imagen-logs", response_class=HTMLResponse)
 async def imagen_logs_page(request: Request, page: int = 1):
-    """Imagen API logs page with pagination."""
+    """Image generation logs page (deprecated feature)."""
     try:
-        # Fetch Imagen logs from blog service
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"http://localhost:{settings.blog_service_port}/imagen-logs?page={page}&page_size=10"
-            )
-            
-            logs_data = []
-            pagination = {}
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("success"):
-                    logs_data = data.get("data", {}).get("logs", [])
-                    pagination = data.get("data", {}).get("pagination", {})
-            
-            return templates.TemplateResponse("imagen_logs.html", {
-                "request": request,
-                "logs": logs_data,
-                "pagination": pagination
-            })
+        # Return empty page as feature is deprecated
+        return templates.TemplateResponse("imagen_logs.html", {
+            "request": request,
+            "logs": [],
+            "pagination": {
+                "current_page": 1,
+                "page_size": 10,
+                "total_logs": 0,
+                "total_pages": 0,
+                "has_next": False,
+                "has_prev": False
+            }
+        })
     except Exception as e:
         return templates.TemplateResponse("imagen_logs.html", {
             "request": request,

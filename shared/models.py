@@ -81,16 +81,14 @@ class Comment(BaseModel):
 
 
 class SettingsBase(BaseModel):
-    gemini_api_key: Optional[str] = None
     source_folder: Optional[str] = None
     default_publication_site: Optional[PublicationSite] = None
     
-    # Google Cloud Imagen Configuration
-    google_cloud_project: Optional[str] = None
-    google_cloud_location: Optional[str] = "us-central1"
-    google_cloud_credentials_path: Optional[str] = None
-    imagen_enabled: bool = False
-    imagen_model: str = "imagen-4.0-generate-001"  # Updated to latest model
+    # IBM watsonx.ai Configuration
+    ibm_cloud_api_key: Optional[str] = None
+    watsonx_project_id: Optional[str] = None
+    watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
+    watsonx_model_id: str = "meta-llama/llama-3-3-70b-instruct"
 
 
 class SettingsCreate(SettingsBase):
@@ -110,29 +108,13 @@ class Settings(SettingsBase):
         from_attributes = True
 
 
-class GeminiAPILog(BaseModel):
+class WatsonxAPILog(BaseModel):
     id: str
     request_timestamp: datetime
     blog_id: Optional[str] = None
     prompt: str
     model_used: str
     response_content: Optional[str] = None
-    response_timestamp: Optional[datetime] = None
-    success: bool
-    error_message: Optional[str] = None
-    processing_time_ms: Optional[int] = None
-    
-    class Config:
-        from_attributes = True
-
-
-class ImagenAPILog(BaseModel):
-    id: str
-    request_timestamp: datetime
-    blog_id: Optional[str] = None
-    prompt: str
-    model_used: str = "imagen-3"
-    image_urls: Optional[List[str]] = None
     response_timestamp: Optional[datetime] = None
     success: bool
     error_message: Optional[str] = None

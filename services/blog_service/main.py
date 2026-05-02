@@ -1,22 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from contextlib import asynccontextmanager
-
-# Prevent Google Generative AI from auto-detecting Vertex AI
 import os
-_original_google_cloud_project = os.environ.get('GOOGLE_CLOUD_PROJECT')
-os.environ.pop('GOOGLE_CLOUD_PROJECT', None)
-
-import google.generativeai as genai
-
-# Restore the original environment variable for Imagen
-if _original_google_cloud_project:
-    os.environ['GOOGLE_CLOUD_PROJECT'] = _original_google_cloud_project
-try:
-    from google.cloud import aiplatform
-    IMAGEN_AVAILABLE = True
-except ImportError:
-    IMAGEN_AVAILABLE = False
-    print("Warning: Google Cloud AI Platform not available. Image generation will use placeholders.")
 import httpx
 from typing import List, Optional
 from pathlib import Path
@@ -34,13 +18,19 @@ sys.path.append(str(project_root))
 from shared.config import settings
 from shared.models import (
     Blog, BlogCreate, BlogUpdate, BlogVersion, Comment, CommentCreate,
-    APIResponse, BlogStatus, GeminiAPILog, ImagenAPILog
+    APIResponse, BlogStatus, WatsonxAPILog
 )
 from shared.utils import (
     generate_id, get_current_timestamp, create_blog_folder_structure, save_blog_version,
     save_prompt, get_next_version_number, list_blog_versions,
     read_file_content, ensure_directory_exists
 )
+
+# Import IBM watsonx client
+from services.watsonx_service.granite_client import get_granite_client
+
+# Image generation will use placeholder images
+IMAGEN_AVAILABLE = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,9 +39,7 @@ async def lifespan(app: FastAPI):
     ensure_data_directory()
     load_blogs_from_file()
     load_comments_from_file()
-    load_gemini_logs_from_file()
-    load_imagen_logs_from_file()
-    await configure_imagen()
+    load_watsonx_logs_from_file()
     yield
 
 
@@ -62,19 +50,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure Gemini AI
-async def get_current_api_key():
-    """Get current API key from settings service."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.settings_service_url}/settings/raw")
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("success") and data.get("data"):
-                    return data["data"].get("gemini_api_key")
-    except:
-        pass
-    return settings.gemini_api_key  # Fallback to environment
+# IBM watsonx client (initialized globally)
+watsonx_client = None
+
+async def get_watsonx_client():
+    """Get or initialize IBM watsonx client."""
+    global watsonx_client
+    if watsonx_client is None:
+        watsonx_client = get_granite_client()
+    return watsonx_client
 
 async def get_current_settings():
     """Get all current settings from settings service."""
@@ -89,81 +73,18 @@ async def get_current_settings():
         print(f"Warning: Settings service exception: {e}")
     return None
 
-async def configure_gemini_dynamic(api_key: str = None):
-    """Configure Gemini AI with dynamic API key."""
-    if not api_key:
-        api_key = await get_current_api_key()
-    
-    if api_key:
-        genai.configure(api_key=api_key)
-        return True
-    return False
 
-# Imagen configuration
-async def configure_imagen():
-    """Configure Google Cloud Imagen API."""
-    if not IMAGEN_AVAILABLE:
-        print("Imagen not available - using placeholder image generation")
-        return False
-        
+async def generate_image_prompts_with_watsonx(content: str, blog_title: str, user_prompt: str = "") -> List[str]:
+    """Use IBM watsonx.ai to generate high-quality image prompts based on blog content."""
     try:
-        # Get settings from database
-        current_settings = await get_current_settings()
-        
-        # Handle both nested and flat settings structures
-        if current_settings:
-            # If we have main_settings key (nested structure)
-            if 'main_settings' in current_settings:
-                main_settings = current_settings['main_settings']
-            else:
-                # If it's already the flat settings structure
-                main_settings = current_settings
-        else:
-            main_settings = None
-            
-        if not main_settings:
-            print("Warning: No settings found. Imagen will use placeholders.")
-            return False
-            
-        project_id = main_settings.get("google_cloud_project")
-        location = main_settings.get("google_cloud_location", "us-central1")
-        credentials_path = main_settings.get("google_cloud_credentials_path")
-        
-        if project_id and credentials_path:
-            # Set environment variables for Google Cloud authentication
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-            os.environ['GOOGLE_CLOUD_PROJECT'] = project_id
-            
-            aiplatform.init(project=project_id, location=location)
-            print(f"Imagen configured: project={project_id}, location={location}")
-            return True
-        else:
-            missing = []
-            if not project_id:
-                missing.append("google_cloud_project")
-            if not credentials_path:
-                missing.append("google_cloud_credentials_path")
-            print(f"Warning: Missing Google Cloud settings: {', '.join(missing)}. Imagen will use placeholders.")
-            return False
-    except Exception as e:
-        print(f"Warning: Failed to configure Imagen: {e}")
-        return False
-
-async def generate_image_prompts_with_gemini(content: str, blog_title: str, user_prompt: str = "") -> List[str]:
-    """Use Gemini API to generate high-quality image prompts based on blog content."""
-    try:
-        # Get current API key
-        api_key = await get_current_api_key()
-        if not api_key:
+        # Get watsonx client
+        client = await get_watsonx_client()
+        if not client:
             # Fallback to default prompts
             return [
                 f"Professional illustration related to {blog_title}, clean modern style, high quality, detailed artwork",
                 f"Abstract representation of {blog_title} concept, minimalist design, professional quality"
             ]
-        
-        # Configure Gemini
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Include user prompt if provided
         user_prompt_context = ""
@@ -174,8 +95,8 @@ Additional User Requirements for Images: {user_prompt}
 Please incorporate these requirements into the image prompts where relevant.
 """
         
-        # Create a prompt for Gemini to generate image descriptions
-        gemini_prompt = f"""
+        # Create a prompt for watsonx to generate image descriptions
+        watsonx_prompt = f"""
 Based on this blog post title and content, create 2 detailed, high-quality image generation prompts that would create visually appealing images to accompany the article.
 
 Blog Title: {blog_title}
@@ -193,9 +114,9 @@ Requirements for each image prompt:
 Please provide exactly 2 image prompts, each on a separate line, starting with "Image 1:" and "Image 2:"
 """
 
-        # Generate prompts using Gemini
-        response = model.generate_content(gemini_prompt)
-        generated_text = response.text.strip()
+        # Generate prompts using IBM watsonx
+        response = client.generate(watsonx_prompt, max_tokens=500)
+        generated_text = response.strip()
         
         # Parse the generated prompts
         image_prompts = []
@@ -219,7 +140,7 @@ Please provide exactly 2 image prompts, each on a separate line, starting with "
         return image_prompts[:2]  # Ensure exactly 2 prompts
         
     except Exception as e:
-        print(f"Error generating image prompts with Gemini: {e}")
+        print(f"Error generating image prompts with IBM watsonx: {e}")
         # Fallback to default prompts
         return [
             f"Professional illustration related to {blog_title}, clean modern style, high quality, detailed artwork",
@@ -260,193 +181,21 @@ def save_imagen_response_to_file(imagen_response, blog_id: str, image_number: in
         print(f"Error saving Imagen response to file: {e}")
         return None
 
-async def generate_images_with_imagen(content: str, blog_title: str, blog_id: str, user_prompt: str = "") -> List[str]:
-    """Generate 2 images based on blog content using Imagen."""
-    try:
-        # Use Gemini to generate high-quality image prompts
-        image_prompts = await generate_image_prompts_with_gemini(content, blog_title, user_prompt)
-        
-        generated_images = []
-        
-        # Try to use actual Imagen API if available
-        if IMAGEN_AVAILABLE:
-            try:
-                # Get current settings from settings service
-                current_settings = await get_current_settings()
-                
-                # Handle both nested and flat settings structures
-                if current_settings:
-                    # If we have main_settings key (nested structure)
-                    if 'main_settings' in current_settings:
-                        main_settings = current_settings['main_settings']
-                    else:
-                        # If it's already the flat settings structure
-                        main_settings = current_settings
-                else:
-                    main_settings = None
-                
-                if not main_settings:
-                    print("Warning: No settings found for Imagen")
-                    # Use fallback placeholder images
-                    for i, prompt in enumerate(image_prompts, 1):
-                        start_time = get_current_timestamp()
-                        log_id = log_imagen_request(blog_id, f"Image {i}: {prompt}", "no-settings-fallback")
-                        
-                        placeholder_url = generate_static_image_url(blog_id, i)
-                        generated_images.append(placeholder_url)
-                        
-                        end_time = get_current_timestamp()
-                        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                        log_imagen_response(log_id, [placeholder_url], "No settings found, using placeholder", processing_time_ms)
-                    return generated_images
-                
-                project_id = main_settings.get("google_cloud_project")
-                location = main_settings.get("google_cloud_location", "us-central1")
-                credentials_path = main_settings.get("google_cloud_credentials_path")
-                imagen_enabled = main_settings.get("imagen_enabled", False)
-                imagen_model = main_settings.get("imagen_model", "imagen-3")
-                
-                if project_id and imagen_enabled:
-                    # Set up authentication if credentials path is provided
-                    if credentials_path and os.path.exists(credentials_path):
-                        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-                    
-                    # Log each image generation request
-                    for i, prompt in enumerate(image_prompts, 1):
-                        start_time = get_current_timestamp()
-                        log_id = log_imagen_request(blog_id, f"Image {i}: {prompt}", imagen_model)
-                        
-                        try:
-                            # Set up authentication
-                            google_cloud_credentials = main_settings.get("google_cloud_credentials_path")
-                            if google_cloud_credentials:
-                                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = google_cloud_credentials
-                            
-                            # Initialize Vertex AI
-                            import vertexai
-                            from vertexai.preview.vision_models import ImageGenerationModel
-                            
-                            vertexai.init(project=project_id, location=location)
-                            
-                            # Get the image generation model
-                            model = ImageGenerationModel.from_pretrained(imagen_model)
-                            
-                            # Generate images
-                            response = model.generate_images(
-                                prompt=prompt,
-                                number_of_images=1,
-                                language="en",
-                                aspect_ratio="1:1"
-                            )
-                            
-                            if response and response.images:
-                                # Save the actual Imagen-generated image to local file
-                                image_url = save_imagen_response_to_file(response, blog_id, i)
-                                
-                                if image_url:
-                                    generated_images.append(image_url)
-                                    # Log successful response with real image URL
-                                    end_time = get_current_timestamp()
-                                    processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                                    log_imagen_response(log_id, [image_url], f"Successfully generated and saved with Imagen {imagen_model}", processing_time_ms)
-                                else:
-                                    # Fallback if saving failed
-                                    fallback_url = generate_static_image_url(blog_id, i)
-                                    generated_images.append(fallback_url)
-                                    end_time = get_current_timestamp()
-                                    processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                                    log_imagen_response(log_id, [fallback_url], "Imagen generated but save failed, using fallback", processing_time_ms)
-                            else:
-                                # Fallback to placeholder
-                                placeholder_url = generate_static_image_url(blog_id, i)
-                                generated_images.append(placeholder_url)
-                                
-                                # Log as fallback
-                                end_time = get_current_timestamp()
-                                processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                                log_imagen_response(log_id, [placeholder_url], "No images generated by Imagen API", processing_time_ms)
-                                
-                        except Exception as api_error:
-                            # Log API error and use placeholder
-                            placeholder_url = generate_static_image_url(blog_id, i)
-                            generated_images.append(placeholder_url)
-                            
-                            end_time = get_current_timestamp()
-                            processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                            log_imagen_response(log_id, [placeholder_url], f"Imagen API error: {str(api_error)}", processing_time_ms)
-                            print(f"Imagen API error for prompt '{prompt}': {api_error}")
-                else:
-                    # No project ID or Imagen not enabled, log and use placeholders
-                    fallback_reason = "Imagen not enabled" if not imagen_enabled else "Google Cloud project not configured"
-                    imagen_model = current_settings.get("imagen_model", "imagen-3") if current_settings else "imagen-3"
-                    for i, prompt in enumerate(image_prompts, 1):
-                        start_time = get_current_timestamp()
-                        log_id = log_imagen_request(blog_id, f"Image {i}: {prompt}", f"{imagen_model}-fallback")
-                        
-                        placeholder_url = generate_static_image_url(blog_id, i)
-                        generated_images.append(placeholder_url)
-                        
-                        end_time = get_current_timestamp()
-                        processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                        log_imagen_response(log_id, [placeholder_url], f"{fallback_reason}, using placeholder", processing_time_ms)
-            
-            except Exception as setup_error:
-                print(f"Imagen setup error: {setup_error}")
-                # Fallback to placeholder with logging
-                for i, prompt in enumerate(image_prompts, 1):
-                    start_time = get_current_timestamp()
-                    log_id = log_imagen_request(blog_id, f"Image {i}: {prompt}", "imagen-3-error")
-                    
-                    placeholder_url = generate_static_image_url(blog_id, i)
-                    generated_images.append(placeholder_url)
-                    
-                    end_time = get_current_timestamp()
-                    processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                    log_imagen_response(log_id, [placeholder_url], f"Imagen setup error: {str(setup_error)}", processing_time_ms)
-        else:
-            # Imagen not available, log and use placeholders
-            for i, prompt in enumerate(image_prompts, 1):
-                start_time = get_current_timestamp()
-                log_id = log_imagen_request(blog_id, f"Image {i}: {prompt}", "placeholder-service")
-                
-                placeholder_url = generate_static_image_url(blog_id, i)
-                generated_images.append(placeholder_url)
-                
-                end_time = get_current_timestamp()
-                processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                log_imagen_response(log_id, [placeholder_url], "Imagen package not available, using placeholder service", processing_time_ms)
-        
-        return generated_images
-        
-    except Exception as e:
-        print(f"Error generating images with Imagen: {e}")
-        # Emergency fallback to static placeholder images with basic logging
-        fallback_images = [
-            generate_static_image_url(blog_id, 1),
-            generate_static_image_url(blog_id, 2)
-        ]
-        
-        # Log the fallback
-        try:
-            log_id = log_imagen_request(blog_id, f"Emergency fallback for {blog_title}", "fallback-service")
-            log_imagen_response(log_id, fallback_images, f"Emergency fallback due to error: {str(e)}", 0)
-        except:
-            pass  # Don't let logging errors prevent fallback
-            
-        return fallback_images
+async def generate_images_with_placeholder(content: str, blog_title: str, blog_id: str, user_prompt: str = "") -> List[str]:
+    """Image generation is disabled. Returns empty list."""
+    # Image generation functionality has been disabled
+    return []
 
 # Persistent storage paths
 DATA_DIR = Path("data")
 BLOGS_DB_FILE = DATA_DIR / "blogs.json"
 COMMENTS_DB_FILE = DATA_DIR / "comments.json"
-GEMINI_LOGS_FILE = DATA_DIR / "gemini_logs.json"
-IMAGEN_LOGS_FILE = DATA_DIR / "imagen_logs.json"
+WATSONX_LOGS_FILE = DATA_DIR / "watsonx_logs.json"
 
 # In-memory storage (loaded from persistent storage)
 blogs_db = {}
 comments_db = {}
-gemini_logs = []  # List to store API logs, ordered by timestamp
-imagen_logs = []  # List to store Imagen API logs, ordered by timestamp
+watsonx_logs = []  # List to store API logs, ordered by timestamp
 
 def ensure_data_directory():
     """Ensure data directory exists."""
@@ -521,48 +270,48 @@ def save_comments_to_file():
     except Exception as e:
         print(f"Error saving comments to file: {e}")
 
-def load_gemini_logs_from_file():
-    """Load Gemini API logs from persistent storage."""
-    global gemini_logs
+def load_watsonx_logs_from_file():
+    """Load WatsonX API logs from persistent storage."""
+    global watsonx_logs
     try:
-        if GEMINI_LOGS_FILE.exists():
-            with open(GEMINI_LOGS_FILE, 'r', encoding='utf-8') as f:
+        if WATSONX_LOGS_FILE.exists():
+            with open(WATSONX_LOGS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                gemini_logs = []
+                watsonx_logs = []
                 for log_data in data:
                     # Convert datetime strings back to datetime objects
                     if 'request_timestamp' in log_data:
                         log_data['request_timestamp'] = datetime.fromisoformat(log_data['request_timestamp'].replace('Z', '+00:00'))
                     if 'response_timestamp' in log_data and log_data['response_timestamp']:
                         log_data['response_timestamp'] = datetime.fromisoformat(log_data['response_timestamp'].replace('Z', '+00:00'))
-                    gemini_logs.append(GeminiAPILog(**log_data))
+                    watsonx_logs.append(WatsonxAPILog(**log_data))
                 # Sort by timestamp (newest first)
-                gemini_logs.sort(key=lambda x: x.request_timestamp, reverse=True)
+                watsonx_logs.sort(key=lambda x: x.request_timestamp, reverse=True)
                 # Keep only last 200 logs
-                gemini_logs = gemini_logs[:200]
-                print(f"Loaded {len(gemini_logs)} Gemini API logs from persistent storage")
+                watsonx_logs = watsonx_logs[:200]
+                print(f"Loaded {len(watsonx_logs)} WatsonX API logs from persistent storage")
     except Exception as e:
-        print(f"Error loading Gemini logs from file: {e}")
-        gemini_logs = []
+        print(f"Error loading WatsonX logs from file: {e}")
+        watsonx_logs = []
 
-def save_gemini_logs_to_file():
-    """Save Gemini API logs to persistent storage."""
+def save_watsonx_logs_to_file():
+    """Save WatsonX API logs to persistent storage."""
     try:
         ensure_data_directory()
         # Keep only last 200 logs
-        logs_to_save = gemini_logs[:200]
+        logs_to_save = watsonx_logs[:200]
         # Convert to serializable dict
         data = [log.model_dump(mode='json') for log in logs_to_save]
         
-        with open(GEMINI_LOGS_FILE, 'w', encoding='utf-8') as f:
+        with open(WATSONX_LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"Error saving Gemini logs to file: {e}")
+        print(f"Error saving WatsonX logs to file: {e}")
 
-def log_gemini_request(blog_id: str, prompt: str, model_used: str = "gemini-2.0-flash"):
-    """Log a Gemini API request."""
-    global gemini_logs
-    log_entry = GeminiAPILog(
+def log_watsonx_request(blog_id: str, prompt: str, model_used: str = "ibm/granite-4-h-small"):
+    """Log a WatsonX API request."""
+    global watsonx_logs
+    log_entry = WatsonxAPILog(
         id=generate_id(),
         request_timestamp=get_current_timestamp(),
         blog_id=blog_id,
@@ -570,13 +319,13 @@ def log_gemini_request(blog_id: str, prompt: str, model_used: str = "gemini-2.0-
         model_used=model_used,
         success=False  # Will be updated when response is received
     )
-    gemini_logs.insert(0, log_entry)  # Add to beginning (newest first)
+    watsonx_logs.insert(0, log_entry)  # Add to beginning (newest first)
     return log_entry.id
 
-def log_gemini_response(log_id: str, response_content: str = None, error_message: str = None, processing_time_ms: int = None):
-    """Update a Gemini API log with response information."""
-    global gemini_logs
-    for log_entry in gemini_logs:
+def log_watsonx_response(log_id: str, response_content: str = None, error_message: str = None, processing_time_ms: int = None):
+    """Update a WatsonX API log with response information."""
+    global watsonx_logs
+    for log_entry in watsonx_logs:
         if log_entry.id == log_id:
             log_entry.response_timestamp = get_current_timestamp()
             log_entry.response_content = response_content
@@ -586,82 +335,8 @@ def log_gemini_response(log_id: str, response_content: str = None, error_message
             break
     
     # Keep only last 200 logs
-    gemini_logs = gemini_logs[:200]
-    save_gemini_logs_to_file()
-
-def load_imagen_logs_from_file():
-    """Load Imagen API logs from persistent storage."""
-    global imagen_logs
-    try:
-        if IMAGEN_LOGS_FILE.exists():
-            with open(IMAGEN_LOGS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                imagen_logs = []
-                for log_data in data:
-                    # Convert datetime strings back to datetime objects
-                    if 'request_timestamp' in log_data:
-                        log_data['request_timestamp'] = datetime.fromisoformat(log_data['request_timestamp'].replace('Z', '+00:00'))
-                    if 'response_timestamp' in log_data and log_data['response_timestamp']:
-                        log_data['response_timestamp'] = datetime.fromisoformat(log_data['response_timestamp'].replace('Z', '+00:00'))
-                    imagen_logs.append(ImagenAPILog(**log_data))
-                # Sort by timestamp (newest first)
-                imagen_logs.sort(key=lambda x: x.request_timestamp, reverse=True)
-                # Keep only last 200 logs
-                imagen_logs = imagen_logs[:200]
-                print(f"Loaded {len(imagen_logs)} Imagen API logs from persistent storage")
-    except Exception as e:
-        print(f"Error loading Imagen logs from file: {e}")
-        imagen_logs = []
-
-def save_imagen_logs_to_file():
-    """Save Imagen API logs to persistent storage."""
-    try:
-        ensure_data_directory()
-        # Keep only last 200 logs
-        logs_to_save = imagen_logs[:200]
-        # Convert to serializable dict
-        data = [log.model_dump(mode='json') for log in logs_to_save]
-        
-        with open(IMAGEN_LOGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"Error saving Imagen logs to file: {e}")
-
-def log_imagen_request(blog_id: str, prompt: str, model_used: str = "imagen-3"):
-    """Log an Imagen API request."""
-    global imagen_logs
-    log_entry = ImagenAPILog(
-        id=generate_id(),
-        request_timestamp=get_current_timestamp(),
-        blog_id=blog_id,
-        prompt=prompt,
-        model_used=model_used,
-        success=False  # Will be updated when response is received
-    )
-    imagen_logs.insert(0, log_entry)  # Add to beginning (newest first)
-    return log_entry.id
-
-def log_imagen_response(log_id: str, image_urls: List[str] = None, error_message: str = None, processing_time_ms: int = None):
-    """Update an Imagen API log with response information."""
-    global imagen_logs
-    for log_entry in imagen_logs:
-        if log_entry.id == log_id:
-            log_entry.response_timestamp = get_current_timestamp()
-            log_entry.image_urls = image_urls
-            log_entry.error_message = error_message
-            log_entry.processing_time_ms = processing_time_ms
-            log_entry.success = image_urls is not None and len(image_urls) > 0
-            break
-    
-    # Keep only last 200 logs
-    imagen_logs = imagen_logs[:200]
-    save_imagen_logs_to_file()
-
-def clear_imagen_logs_for_blog(blog_id: str):
-    """Clear all existing Imagen logs for a specific blog ID to avoid confusion."""
-    global imagen_logs
-    imagen_logs = [log for log in imagen_logs if log.blog_id != blog_id]
-    save_imagen_logs_to_file()
+    watsonx_logs = watsonx_logs[:200]
+    save_watsonx_logs_to_file()
 
 
 @app.get("/")
@@ -678,17 +353,17 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "blog-service"}
 
-@app.get("/gemini-logs", response_model=APIResponse)
-async def get_gemini_logs(page: int = 1, page_size: int = 10):
-    """Get Gemini API logs with pagination."""
+@app.get("/watsonx-logs", response_model=APIResponse)
+async def get_watsonx_logs(page: int = 1, page_size: int = 10):
+    """Get WatsonX API logs with pagination."""
     try:
         # Calculate pagination
-        total_logs = len(gemini_logs)
+        total_logs = len(watsonx_logs)
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         
         # Get logs for current page
-        page_logs = gemini_logs[start_idx:end_idx]
+        page_logs = watsonx_logs[start_idx:end_idx]
         logs_data = [log.model_dump(mode='json') for log in page_logs]
         
         # Calculate pagination info
@@ -696,7 +371,7 @@ async def get_gemini_logs(page: int = 1, page_size: int = 10):
         
         return APIResponse(
             success=True,
-            message="Gemini logs retrieved successfully",
+            message="WatsonX logs retrieved successfully",
             data={
                 "logs": logs_data,
                 "pagination": {
@@ -714,37 +389,27 @@ async def get_gemini_logs(page: int = 1, page_size: int = 10):
 
 @app.get("/imagen-logs", response_model=APIResponse)
 async def get_imagen_logs(page: int = 1, page_size: int = 10):
-    """Get Imagen API logs with pagination."""
+    """Get image generation logs (placeholder - no longer used)."""
     try:
-        # Calculate pagination
-        total_logs = len(imagen_logs)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        
-        # Get logs for current page
-        page_logs = imagen_logs[start_idx:end_idx]
-        logs_data = [log.model_dump(mode='json') for log in page_logs]
-        
-        # Calculate pagination info
-        total_pages = (total_logs + page_size - 1) // page_size
-        
+        # Return empty logs as image generation is no longer active
         return APIResponse(
             success=True,
-            message="Imagen logs retrieved successfully",
+            message="Image generation logs (feature deprecated)",
             data={
-                "logs": logs_data,
+                "logs": [],
                 "pagination": {
                     "current_page": page,
                     "page_size": page_size,
-                    "total_logs": total_logs,
-                    "total_pages": total_pages,
-                    "has_next": page < total_pages,
-                    "has_prev": page > 1
+                    "total_logs": 0,
+                    "total_pages": 0,
+                    "has_next": False,
+                    "has_prev": False
                 }
             }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+        
 
 @app.post("/blogs", response_model=APIResponse)
 async def create_blog(blog_data: BlogCreate):
@@ -769,7 +434,8 @@ async def create_blog(blog_data: BlogCreate):
             created_at=get_current_timestamp(),
             updated_at=get_current_timestamp(),
             folder_path=folder_path,
-            current_version=0
+            current_version=0,
+            latest_content=""  # Initialize with empty string instead of None
         )
         
         blogs_db[blog_id] = blog
@@ -1014,52 +680,45 @@ async def delete_blog_version(blog_id: str, version_num: int):
 
 @app.post("/blogs/{blog_id}/generate", response_model=APIResponse)
 async def generate_blog_content(blog_id: str, request_data: dict):
-    """Generate new blog content using Gemini AI."""
+    """Generate new blog content using IBM watsonx AI."""
     try:
         if blog_id not in blogs_db:
             raise HTTPException(status_code=404, detail="Blog not found")
         
         blog = blogs_db[blog_id]
         prompt = request_data.get("prompt", "")
-        generation_type = request_data.get("generation_type", "all")  # all, text, images
+        generation_type = request_data.get("generation_type", "text")  # Default to text only
         
         if not prompt:
             raise HTTPException(status_code=400, detail="Prompt is required")
             
-        # Validate generation type
-        if generation_type not in ["all", "text", "images"]:
-            raise HTTPException(status_code=400, detail="Invalid generation_type. Must be 'all', 'text', or 'images'")
+        # Force text-only generation (images disabled)
+        generation_type = "text"
         
-        # For image-only generation, we need existing content
-        if generation_type == "images" and not blog.latest_content:
-            raise HTTPException(status_code=400, detail="Cannot generate images only without existing text content")
+        # Get IBM watsonx client
+        client = await get_watsonx_client()
+        if not client:
+            raise HTTPException(status_code=500, detail="IBM watsonx client not initialized")
         
-        # Get current API key from settings service
-        current_api_key = await get_current_api_key()
-        if not current_api_key:
-            raise HTTPException(status_code=500, detail="Gemini API key not configured")
+        final_content = ""
+        images_generated = False
+        text_generated = False
+        log_id = ""
+        start_time = get_current_timestamp()
         
         try:
-            final_content = ""
-            images_generated = False
-            text_generated = False
-            log_id = None
-            start_time = None
-            
-            # Handle different generation types
-            if generation_type in ["all", "text"]:
-                # Generate text content
-                current_content_context = ""
-                if blog.latest_content:
-                    current_content_context = f"""
+            # Generate text content only (images disabled)
+            current_content_context = ""
+            if blog.latest_content:
+                current_content_context = f"""
 
 Current Blog Content:
 {blog.latest_content}
 
 """
-                
-                enhanced_prompt = f"""You are an expert blog writer creating high-quality, engaging content for the blog titled: "{blog.title}"
-                
+            
+            enhanced_prompt = f"""You are an expert blog writer creating high-quality, engaging content for the blog titled: "{blog.title}"
+            
 Blog Description: {blog.description or "No description provided"}
 Tags: {', '.join(blog.tags) if blog.tags else "No tags"}
 Publication Site: {blog.publication_site or "General audience"}{current_content_context}
@@ -1069,90 +728,31 @@ IMPORTANT REQUIREMENTS:
 1. Create professional, well-structured blog content that is engaging, informative, and optimized for the target audience
 2. Use appropriate headings, bullet points, and formatting when relevant
 3. Write in a clear, professional tone suitable for online publication
-4. DO NOT include any images in your response - images will be generated separately
-5. Focus purely on text content with excellent structure and flow
-6. Create comprehensive, detailed content that stands on its own
-7. Use markdown formatting for headers, lists, and emphasis
+4. Focus purely on text content with excellent structure and flow
+5. Create comprehensive, detailed content that stands on its own
+6. Use markdown formatting for headers, lists, and emphasis
 
 {f"Based on the current content above, " + prompt if blog.latest_content else prompt}"""
-                
-                # Log the request
-                start_time = get_current_timestamp()
-                log_id = log_gemini_request(blog_id, enhanced_prompt, 'gemini-2.0-flash')
-                
-                # Configure Gemini with current API key
-                await configure_gemini_dynamic(current_api_key)
-                
-                # Initialize Gemini model
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                
-                # Generate content
-                response = model.generate_content(enhanced_prompt)
-                generated_content = response.text
-                text_generated = True
-                
-                # Calculate processing time and log response
-                end_time = get_current_timestamp()
-                processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                log_gemini_response(log_id, generated_content, None, processing_time_ms)
-            else:
-                # For images-only generation, use existing content
-                generated_content = blog.latest_content
             
-            # Handle image generation
-            if generation_type in ["all", "images"]:
-                try:
-                    image_urls = await generate_images_with_imagen(generated_content, blog.title, blog_id, prompt)
-                    images_generated = True
-                    
-                    # Create the final content with images
-                    if generation_type == "images":
-                        # For images-only, replace existing image section or add at the end
-                        content_lines = generated_content.split('\n')
-                        
-                        # Find and remove existing image section
-                        start_idx = -1
-                        for i, line in enumerate(content_lines):
-                            if line.strip() == "## Generated Images":
-                                start_idx = i
-                                break
-                        
-                        if start_idx >= 0:
-                            # Remove existing image section
-                            content_lines = content_lines[:start_idx]
-                        
-                        # Add new image section
-                        base_content = '\n'.join(content_lines).rstrip()
-                        final_content = base_content + "\n\n---\n\n## Generated Images\n\n"
-                    else:
-                        # For all or text+images, add images to the generated content
-                        final_content = generated_content + "\n\n---\n\n## Generated Images\n\n"
-                    
-                    final_content += "*The following images were generated based on the blog content and can be manually placed throughout the article as needed:*\n\n"
-                    
-                    for i, image_url in enumerate(image_urls, 1):
-                        # Create descriptive alt text based on content themes
-                        if "AI" in generated_content.upper() or "artificial intelligence" in generated_content.lower():
-                            alt_text = f"AI and technology illustration {i}"
-                        elif "coding" in generated_content.lower() or "development" in generated_content.lower():
-                            alt_text = f"Software development illustration {i}"
-                        else:
-                            alt_text = f"Professional illustration related to {blog.title} - Image {i}"
-                        
-                        final_content += f"**Image {i}:**\n"
-                        final_content += f"![{alt_text}]({image_url})\n\n"
-                    
-                except Exception as img_error:
-                    print(f"Warning: Image generation failed: {img_error}")
-                    images_generated = False
-                    if generation_type == "images":
-                        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(img_error)}")
-                    else:
-                        # For all/text generation, continue without images
-                        final_content = generated_content + "\n\n---\n\n*Note: Image generation was not available for this content.*"
-            else:
-                # Text-only generation
-                final_content = generated_content
+            # Log the request with the correct model from config
+            from services.watsonx_service.config import granite_config
+            log_id = log_watsonx_request(blog_id, enhanced_prompt, granite_config.model_id)
+            
+            # Generate content with IBM watsonx
+            generated_content = client.generate(enhanced_prompt)
+            
+            if not generated_content:
+                raise Exception("IBM watsonx returned empty response")
+            
+            text_generated = True
+            
+            # Calculate processing time and log response
+            end_time = get_current_timestamp()
+            processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
+            log_watsonx_response(log_id, generated_content, "", processing_time_ms)
+            
+            # Text-only generation (no images)
+            final_content = generated_content
             
             # Save the prompt
             save_prompt(blog.folder_path, prompt)
@@ -1168,13 +768,8 @@ IMPORTANT REQUIREMENTS:
             blog.status = BlogStatus.IN_PROGRESS
             save_blogs_to_file()  # Save to persistent storage
             
-            # Create success message based on generation type
-            if generation_type == "text":
-                message = "Blog text content generated successfully"
-            elif generation_type == "images":
-                message = "Blog images generated successfully"
-            else:
-                message = "Blog content generated successfully with text and images"
+            # Success message for text-only generation
+            message = "Blog content generated successfully"
             
             return APIResponse(
                 success=True,
@@ -1183,17 +778,17 @@ IMPORTANT REQUIREMENTS:
                     "version": version_number,
                     "content": final_content,
                     "file_path": version_file,
-                    "generation_type": generation_type,
+                    "generation_type": "text",
                     "text_generated": text_generated,
-                    "images_generated": images_generated
+                    "images_generated": False
                 }
             )
             
         except Exception as ai_error:
-            if log_id and start_time:
+            if log_id:
                 end_time = get_current_timestamp()
                 processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                log_gemini_response(log_id, None, str(ai_error), processing_time_ms)
+                log_watsonx_response(log_id, "", str(ai_error), processing_time_ms)
             raise HTTPException(status_code=500, detail=f"AI generation error: {str(ai_error)}")
         
     except HTTPException:

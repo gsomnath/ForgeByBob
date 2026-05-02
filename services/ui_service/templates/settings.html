@@ -8,12 +8,48 @@
 <div class="card">
     <form method="post" action="/settings">
         <div class="form-group">
-            <label for="gemini_api_key">Gemini AI API Key</label>
-            <input type="password" id="gemini_api_key" name="gemini_api_key" 
-                   value="{% if settings.gemini_api_key and settings.gemini_api_key != '***masked***' %}{{ settings.gemini_api_key }}{% endif %}"
-                   placeholder="Enter your Gemini AI API key">
+            <label for="ibm_cloud_api_key">IBM Cloud API Key</label>
+            <input type="password" id="ibm_cloud_api_key" name="ibm_cloud_api_key" 
+                   value="{% if settings.ibm_cloud_api_key and settings.ibm_cloud_api_key != '***masked***' %}{{ settings.ibm_cloud_api_key }}{% endif %}"
+                   placeholder="Enter your IBM Cloud API key">
             <small style="color: #666; display: block; margin-top: 0.25rem;">
-                Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>
+                Get your API key from <a href="https://cloud.ibm.com/iam/apikeys" target="_blank">IBM Cloud IAM</a>
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="watsonx_project_id">IBM watsonx.ai Project ID</label>
+            <input type="text" id="watsonx_project_id" name="watsonx_project_id" 
+                   value="{{ settings.watsonx_project_id or '' }}"
+                   placeholder="Enter your watsonx.ai project ID">
+            <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Find your project ID in <a href="https://dataplatform.cloud.ibm.com/wx/home" target="_blank">IBM watsonx.ai</a>
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="watsonx_url">IBM watsonx.ai URL</label>
+            <select id="watsonx_url" name="watsonx_url">
+                <option value="https://us-south.ml.cloud.ibm.com" {% if settings.watsonx_url == 'https://us-south.ml.cloud.ibm.com' %}selected{% endif %}>US South</option>
+                <option value="https://eu-de.ml.cloud.ibm.com" {% if settings.watsonx_url == 'https://eu-de.ml.cloud.ibm.com' %}selected{% endif %}>EU Germany</option>
+                <option value="https://eu-gb.ml.cloud.ibm.com" {% if settings.watsonx_url == 'https://eu-gb.ml.cloud.ibm.com' %}selected{% endif %}>EU UK</option>
+                <option value="https://jp-tok.ml.cloud.ibm.com" {% if settings.watsonx_url == 'https://jp-tok.ml.cloud.ibm.com' %}selected{% endif %}>Japan Tokyo</option>
+            </select>
+            <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Select the region where your watsonx.ai instance is deployed
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="watsonx_model_id">IBM watsonx.ai Model</label>
+            <select id="watsonx_model_id" name="watsonx_model_id">
+                <option value="ibm/granite-4-h-small" {% if settings.watsonx_model_id == 'ibm/granite-4-h-small' %}selected{% endif %}>Granite 4 H Small (Recommended)</option>
+                <option value="meta-llama/llama-3-3-70b-instruct" {% if settings.watsonx_model_id == 'meta-llama/llama-3-3-70b-instruct' %}selected{% endif %}>Llama 3.3 70B Instruct</option>
+                <option value="ibm/granite-3-8b-instruct" {% if settings.watsonx_model_id == 'ibm/granite-3-8b-instruct' %}selected{% endif %}>Granite 3 8B Instruct</option>
+                <option value="ibm/granite-13b-chat-v2" {% if settings.watsonx_model_id == 'ibm/granite-13b-chat-v2' %}selected{% endif %}>Granite 13B Chat v2</option>
+            </select>
+            <small style="color: #666; display: block; margin-top: 0.25rem;">
+                Select the foundation model to use for content generation. Granite 4.0 H Small is optimized for efficiency.
             </small>
         </div>
         
@@ -38,72 +74,6 @@
             </select>
         </div>
         
-        <!-- Google Cloud Imagen Configuration -->
-        <div style="border-top: 1px solid #ddd; margin: 2rem 0 1rem 0; padding-top: 1.5rem;">
-            <h4 style="margin-bottom: 1rem; color: #2c3e50;">🖼️ Google Cloud Imagen Configuration</h4>
-            <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">
-                Configure Google Cloud Imagen for AI-powered image generation. Images will use placeholders if not configured.
-            </p>
-            
-            <div class="form-group">
-                <label for="imagen_enabled">
-                    <input type="checkbox" id="imagen_enabled" name="imagen_enabled" 
-                           {% if settings.imagen_enabled %}checked{% endif %}>
-                    Enable Google Cloud Imagen
-                </label>
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    Enable this to use real Google Cloud Imagen API instead of placeholder images
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="google_cloud_project">Google Cloud Project ID</label>
-                <input type="text" id="google_cloud_project" name="google_cloud_project" 
-                       value="{{ settings.google_cloud_project or '' }}"
-                       placeholder="your-project-id">
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    Your Google Cloud Project ID with Vertex AI enabled
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="google_cloud_location">Google Cloud Location</label>
-                <select id="google_cloud_location" name="google_cloud_location">
-                    <option value="us-central1" {% if settings.google_cloud_location == 'us-central1' %}selected{% endif %}>us-central1</option>
-                    <option value="us-east1" {% if settings.google_cloud_location == 'us-east1' %}selected{% endif %}>us-east1</option>
-                    <option value="us-west1" {% if settings.google_cloud_location == 'us-west1' %}selected{% endif %}>us-west1</option>
-                    <option value="europe-west1" {% if settings.google_cloud_location == 'europe-west1' %}selected{% endif %}>europe-west1</option>
-                    <option value="asia-east1" {% if settings.google_cloud_location == 'asia-east1' %}selected{% endif %}>asia-east1</option>
-                </select>
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    Google Cloud region where Imagen API is available
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="google_cloud_credentials_path">Service Account Key Path (Optional)</label>
-                <input type="text" id="google_cloud_credentials_path" name="google_cloud_credentials_path" 
-                       value="{{ settings.google_cloud_credentials_path or '' }}"
-                       placeholder="/path/to/service-account-key.json">
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    Path to service account JSON file. Leave empty to use default credentials or environment variables.
-                </small>
-            </div>
-            
-            <div class="form-group">
-                <label for="imagen_model">Imagen Model</label>
-                <select id="imagen_model" name="imagen_model">
-                    <option value="imagen-3" {% if settings.imagen_model == 'imagen-3' %}selected{% endif %}>Imagen 3</option>
-                    <option value="imagen-2" {% if settings.imagen_model == 'imagen-2' %}selected{% endif %}>Imagen 2</option>
-                    <option value="imagen-4.0-generate-001" {% if settings.imagen_model == 'imagen-4.0-generate-001' %}selected{% endif %}>Imagen 4.0 (Latest)</option>
-                </select>
-                <small style="color: #666; display: block; margin-top: 0.25rem;">
-                    Which version of Imagen to use for image generation. Imagen 4.0 offers enhanced quality and latest features.
-                </small>
-                </small>
-            </div>
-        </div>
-        
         <div class="form-group">
             <button type="submit" class="btn btn-primary">Save Settings</button>
         </div>
@@ -114,9 +84,21 @@
     <h4>Configuration Status</h4>
     <div style="margin-top: 1rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <span>Gemini AI API Key:</span>
-            <span class="status {% if settings.gemini_api_key and settings.gemini_api_key != '' %}status-completed{% else %}status-draft{% endif %}">
-                {% if settings.gemini_api_key and settings.gemini_api_key != '' %}Configured{% else %}Not Set{% endif %}
+            <span>IBM Cloud API Key:</span>
+            <span class="status {% if settings.ibm_cloud_api_key and settings.ibm_cloud_api_key != '' %}status-completed{% else %}status-draft{% endif %}">
+                {% if settings.ibm_cloud_api_key and settings.ibm_cloud_api_key != '' %}Configured{% else %}Not Set{% endif %}
+            </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span>watsonx.ai Project ID:</span>
+            <span class="status {% if settings.watsonx_project_id %}status-completed{% else %}status-draft{% endif %}">
+                {% if settings.watsonx_project_id %}{{ settings.watsonx_project_id[:8] }}...{% else %}Not Set{% endif %}
+            </span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span>watsonx.ai Model:</span>
+            <span class="status status-in_progress">
+                {{ settings.watsonx_model_id or 'meta-llama/llama-3-3-70b-instruct' }}
             </span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -131,23 +113,10 @@
                 {{ settings.default_publication_site|title if settings.default_publication_site else 'None' }}
             </span>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-            <span>Google Cloud Imagen:</span>
-            <span class="status {% if settings.imagen_enabled and settings.google_cloud_project %}status-completed{% elif settings.imagen_enabled %}status-error{% else %}status-draft{% endif %}">
-                {% if settings.imagen_enabled and settings.google_cloud_project %}Enabled ({{ settings.google_cloud_project }}){% elif settings.imagen_enabled %}Enabled (No Project ID){% else %}Disabled{% endif %}
-            </span>
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-            <span>Imagen Model:</span>
-            <span class="status status-in_progress">
-                {{ settings.imagen_model or 'imagen-3' }}
-            </span>
-        </div>
     </div>
     
     <div style="margin-top: 1.5rem;">
-        <button onclick="testGeminiConnection()" class="btn" style="background: #f39c12;">Test Gemini Connection</button>
-        <button onclick="testImagenConnection()" class="btn" style="background: #9b59b6; margin-left: 0.5rem;">Test Imagen Connection</button>
+        <button onclick="testWatsonxConnection()" class="btn" style="background: #0f62fe;">Test watsonx.ai Connection</button>
     </div>
     
     <div id="testResult" style="margin-top: 1rem; display: none;"></div>
@@ -157,28 +126,14 @@
     <h4>Setup Instructions</h4>
     
     <div style="margin-top: 1rem;">
-        <h5 style="color: #2c3e50;">📝 Basic Setup</h5>
+        <h5 style="color: #2c3e50;">📝 IBM watsonx.ai Setup</h5>
         <ol style="margin-left: 2rem; margin-top: 0.5rem;">
-            <li>Get a Gemini AI API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
-            <li>Enter your API key in the form above</li>
-            <li>Specify a local folder where blog projects will be stored</li>
-            <li>Optionally set a default publication site</li>
-        </ol>
-    </div>
-    
-    <div style="margin-top: 1.5rem;">
-        <h5 style="color: #2c3e50;">🖼️ Google Cloud Imagen Setup (Optional)</h5>
-        <ol style="margin-left: 2rem; margin-top: 0.5rem;">
-            <li>Create a Google Cloud Project and enable the <a href="https://console.cloud.google.com/apis/library/aiplatform.googleapis.com" target="_blank">Vertex AI API</a></li>
-            <li>Set up authentication:
-                <ul style="margin-left: 1rem; margin-top: 0.5rem;">
-                    <li><strong>Option A:</strong> Create a service account and download the JSON key file</li>
-                    <li><strong>Option B:</strong> Use <code>gcloud auth application-default login</code> for default credentials</li>
-                    <li><strong>Option C:</strong> Set the <code>GOOGLE_APPLICATION_CREDENTIALS</code> environment variable</li>
-                </ul>
-            </li>
-            <li>Enter your Project ID and enable Imagen in the configuration above</li>
-            <li>Optionally specify the path to your service account key file</li>
+            <li>Create an IBM Cloud account at <a href="https://cloud.ibm.com/registration" target="_blank">IBM Cloud</a></li>
+            <li>Create a watsonx.ai instance and project in <a href="https://dataplatform.cloud.ibm.com/wx/home" target="_blank">IBM watsonx.ai</a></li>
+            <li>Generate an API key from <a href="https://cloud.ibm.com/iam/apikeys" target="_blank">IBM Cloud IAM</a></li>
+            <li>Copy your project ID from the watsonx.ai project settings</li>
+            <li>Enter your credentials in the form above</li>
+            <li>Select your preferred region and foundation model</li>
         </ol>
     </div>
     
@@ -186,8 +141,8 @@
         <h5 style="color: #2c3e50;">✅ Final Steps</h5>
         <ol style="margin-left: 2rem; margin-top: 0.5rem;">
             <li>Click "Save Settings" to apply your configuration</li>
-            <li>Use "Test Gemini Connection" to verify your Gemini API key works</li>
-            <li>Use "Test Imagen Connection" to verify your Google Cloud setup (if enabled)</li>
+            <li>Use "Test watsonx.ai Connection" to verify your credentials work</li>
+            <li>Start creating blog content with AI-powered assistance!</li>
         </ol>
     </div>
 </div>
@@ -208,13 +163,13 @@ if (urlParams.get('success')) {
     document.querySelector('.container').insertBefore(successDiv, document.querySelector('.container').firstChild);
 }
 
-async function testGeminiConnection() {
+async function testWatsonxConnection() {
     const resultDiv = document.getElementById('testResult');
     resultDiv.style.display = 'block';
-    resultDiv.innerHTML = '<div style="color: #666;">Testing Gemini connection...</div>';
+    resultDiv.innerHTML = '<div style="color: #666;">Testing watsonx.ai connection...</div>';
     
     try {
-        const response = await fetch('http://localhost:8002/settings/test-gemini', {
+        const response = await fetch('http://localhost:8002/settings/test-watsonx', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -224,48 +179,25 @@ async function testGeminiConnection() {
         const data = await response.json();
         
         if (data.success) {
-            resultDiv.innerHTML = '<div class="alert alert-success">✓ Gemini connection successful!<br><small>Response: ' + (data.data?.test_response || 'API working') + '</small></div>';
+            resultDiv.innerHTML = '<div class="alert alert-success">✓ watsonx.ai connection successful!<br><small>Response: ' + (data.data?.test_response || 'API working') + '</small></div>';
         } else {
+            let errorMessage = data.message || 'Unknown error';
+            let alertClass = 'alert-error';
+            
+            // Check if it's a rate limit error
+            if (errorMessage.includes('Rate limit') || errorMessage.includes('429') || errorMessage.includes('⏱️')) {
+                alertClass = 'alert alert-warning';
+                errorMessage = '<strong>⏱️ Rate Limit Reached</strong><br>' + errorMessage;
+            } else {
+                errorMessage = '✗ ' + errorMessage;
+            }
+            
             let errorDetails = '';
-            if (data.data?.error) {
-                errorDetails = '<br><small>Details: ' + data.data.error + '</small>';
-                if (data.data.error_type) {
-                    errorDetails += '<br><small>Error Type: ' + data.data.error_type + '</small>';
-                }
+            if (data.data?.error && !errorMessage.includes('Rate limit')) {
+                errorDetails = '<br><small style="margin-top: 0.5rem; display: block;">Technical details: ' + data.data.error + '</small>';
             }
-            resultDiv.innerHTML = '<div class="alert alert-error">✗ Gemini connection failed: ' + (data.message || 'Unknown error') + errorDetails + '</div>';
-        }
-    } catch (error) {
-        resultDiv.innerHTML = '<div class="alert alert-error">✗ Error testing connection: ' + error.message + '</div>';
-    }
-}
-
-async function testImagenConnection() {
-    const resultDiv = document.getElementById('testResult');
-    resultDiv.style.display = 'block';
-    resultDiv.innerHTML = '<div style="color: #666;">Testing Imagen connection...</div>';
-    
-    try {
-        const response = await fetch('http://localhost:8002/settings/test-imagen', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            resultDiv.innerHTML = '<div class="alert alert-success">✓ Imagen connection successful!<br><small>' + (data.message || 'Google Cloud Imagen API is accessible') + '</small></div>';
-        } else {
-            let errorDetails = '';
-            if (data.data?.error) {
-                errorDetails = '<br><small>Details: ' + data.data.error + '</small>';
-                if (data.data.error_type) {
-                    errorDetails += '<br><small>Error Type: ' + data.data.error_type + '</small>';
-                }
-            }
-            resultDiv.innerHTML = '<div class="alert alert-error">✗ Imagen connection failed: ' + (data.message || 'Unknown error') + errorDetails + '</div>';
+            
+            resultDiv.innerHTML = '<div class="' + alertClass + '">' + errorMessage + errorDetails + '</div>';
         }
     } catch (error) {
         resultDiv.innerHTML = '<div class="alert alert-error">✗ Error testing connection: ' + error.message + '</div>';

@@ -88,17 +88,21 @@
 
 <!-- Generate Content Section -->
 <div class="card">
-    <h4>Generate New Content</h4>
+    <h4>Generate New Content with IBM watsonx.ai</h4>
     <form method="post" action="/blog/{{ blog.id }}/generate">
         <div class="form-group">
             <label for="prompt">Prompt for AI Generation</label>
             <textarea id="prompt" name="prompt" required placeholder="Describe what you want to generate or modify in your blog content..."></textarea>
+            <p style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
+                💡 <strong>Tip:</strong> Be specific about what you want. IBM watsonx.ai will generate high-quality text content based on your prompt.
+            </p>
         </div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button type="submit" name="generation_type" value="all" class="btn btn-success">Generate All Content</button>
-            <button type="submit" name="generation_type" value="text" class="btn btn-primary">Generate Text</button>
-            <button type="submit" name="generation_type" value="images" class="btn btn-info">Generate Images</button>
+            <button type="submit" name="generation_type" value="text" class="btn btn-primary">Generate Content</button>
         </div>
+        <p style="font-size: 0.85rem; color: #999; margin-top: 0.5rem;">
+            ⚠️ Note: Free tier has rate limits. Wait 5 minutes between requests if you encounter errors.
+        </p>
     </form>
 </div>
 

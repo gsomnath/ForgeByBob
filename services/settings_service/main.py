@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import json
+import logging
 from datetime import datetime, timezone
 
 # Add the project root to the Python path
@@ -43,17 +44,15 @@ def load_settings_from_file():
                     if 'updated_at' in settings_data:
                         settings_data['updated_at'] = datetime.fromisoformat(settings_data['updated_at'].replace('Z', '+00:00'))
                     
-                    # Ensure all Google Cloud Imagen fields have proper defaults if missing
-                    if 'google_cloud_project' not in settings_data:
-                        settings_data['google_cloud_project'] = None
-                    if 'google_cloud_location' not in settings_data:
-                        settings_data['google_cloud_location'] = "us-central1"
-                    if 'google_cloud_credentials_path' not in settings_data:
-                        settings_data['google_cloud_credentials_path'] = None
-                    if 'imagen_enabled' not in settings_data:
-                        settings_data['imagen_enabled'] = False
-                    if 'imagen_model' not in settings_data:
-                        settings_data['imagen_model'] = "imagen-3"
+                    # Ensure all IBM watsonx fields have proper defaults if missing
+                    if 'ibm_cloud_api_key' not in settings_data:
+                        settings_data['ibm_cloud_api_key'] = None
+                    if 'watsonx_project_id' not in settings_data:
+                        settings_data['watsonx_project_id'] = None
+                    if 'watsonx_url' not in settings_data:
+                        settings_data['watsonx_url'] = "https://us-south.ml.cloud.ibm.com"
+                    if 'watsonx_model_id' not in settings_data:
+                        settings_data['watsonx_model_id'] = "meta-llama/llama-3-3-70b-instruct"
                     
                     settings_db[settings_id] = Settings(**settings_data)
                 print(f"Loaded settings from persistent storage")
@@ -83,7 +82,10 @@ async def lifespan(app: FastAPI):
     if SETTINGS_ID not in settings_db:
         default_settings = Settings(
             id=SETTINGS_ID,
-            gemini_api_key=app_settings.gemini_api_key,
+            ibm_cloud_api_key=app_settings.ibm_cloud_api_key,
+            watsonx_project_id=app_settings.watsonx_project_id,
+            watsonx_url=app_settings.watsonx_url,
+            watsonx_model_id=app_settings.watsonx_model_id,
             source_folder=app_settings.source_folder,
             default_publication_site=None,
             created_at=datetime.now(timezone.utc),
@@ -134,8 +136,8 @@ async def get_settings():
         # Return settings without sensitive data for public access
         settings_data = settings.model_dump(mode='json')
         # Mask API key for security
-        if settings_data.get("gemini_api_key"):
-            settings_data["gemini_api_key"] = "***masked***"
+        if settings_data.get("ibm_cloud_api_key"):
+            settings_data["ibm_cloud_api_key"] = "***masked***"
         
         return APIResponse(
             success=True,
@@ -161,8 +163,14 @@ async def update_settings(settings_update: SettingsUpdate):
             )
         
         # Update fields
-        if settings_update.gemini_api_key is not None:
-            current_settings.gemini_api_key = settings_update.gemini_api_key
+        if settings_update.ibm_cloud_api_key is not None:
+            current_settings.ibm_cloud_api_key = settings_update.ibm_cloud_api_key
+        if settings_update.watsonx_project_id is not None:
+            current_settings.watsonx_project_id = settings_update.watsonx_project_id
+        if settings_update.watsonx_url is not None:
+            current_settings.watsonx_url = settings_update.watsonx_url
+        if settings_update.watsonx_model_id is not None:
+            current_settings.watsonx_model_id = settings_update.watsonx_model_id
         if settings_update.source_folder is not None:
             current_settings.source_folder = settings_update.source_folder
             # Ensure the source folder exists
@@ -170,26 +178,14 @@ async def update_settings(settings_update: SettingsUpdate):
         if settings_update.default_publication_site is not None:
             current_settings.default_publication_site = settings_update.default_publication_site
         
-        # Update Google Cloud Imagen fields
-        if settings_update.google_cloud_project is not None:
-            current_settings.google_cloud_project = settings_update.google_cloud_project
-        if settings_update.google_cloud_location is not None:
-            current_settings.google_cloud_location = settings_update.google_cloud_location
-        if settings_update.google_cloud_credentials_path is not None:
-            current_settings.google_cloud_credentials_path = settings_update.google_cloud_credentials_path
-        if settings_update.imagen_enabled is not None:
-            current_settings.imagen_enabled = settings_update.imagen_enabled
-        if settings_update.imagen_model is not None:
-            current_settings.imagen_model = settings_update.imagen_model
-        
         current_settings.updated_at = datetime.now(timezone.utc)
         settings_db[SETTINGS_ID] = current_settings
         save_settings_to_file()  # Save to persistent storage
         
         # Return settings without sensitive data
         settings_data = current_settings.model_dump(mode='json')
-        if settings_data.get("gemini_api_key"):
-            settings_data["gemini_api_key"] = "***masked***"
+        if settings_data.get("ibm_cloud_api_key"):
+            settings_data["ibm_cloud_api_key"] = "***masked***"
         
         return APIResponse(
             success=True,
@@ -211,7 +207,8 @@ async def validate_settings():
             )
         
         validation_results = {
-            "gemini_api_key": bool(settings.gemini_api_key),
+            "ibm_cloud_api_key": bool(settings.ibm_cloud_api_key),
+            "watsonx_project_id": bool(settings.watsonx_project_id),
             "source_folder": bool(settings.source_folder),
             "source_folder_exists": False
         }
@@ -221,7 +218,8 @@ async def validate_settings():
             validation_results["source_folder_exists"] = Path(settings.source_folder).exists()
         
         is_valid = all([
-            validation_results["gemini_api_key"],
+            validation_results["ibm_cloud_api_key"],
+            validation_results["watsonx_project_id"],
             validation_results["source_folder"],
             validation_results["source_folder_exists"]
         ])
@@ -237,111 +235,104 @@ async def validate_settings():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/settings/test-gemini", response_model=APIResponse)
-async def test_gemini_connection():
-    """Test Gemini AI connection with current API key."""
+@app.post("/settings/test-watsonx", response_model=APIResponse)
+async def test_watsonx_connection():
+    """Test IBM watsonx.ai connection with current credentials."""
     try:
         settings = settings_db.get(SETTINGS_ID)
-        if not settings or not settings.gemini_api_key:
-            raise HTTPException(status_code=400, detail="Gemini API key not configured")
+        if not settings or not settings.ibm_cloud_api_key or not settings.watsonx_project_id:
+            raise HTTPException(status_code=400, detail="IBM watsonx credentials not configured")
         
         try:
-            import google.generativeai as genai
+            from ibm_watsonx_ai.foundation_models import ModelInference
+            from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
             
-            # Configure Gemini with the current API key
-            genai.configure(api_key=settings.gemini_api_key)
+            logger = logging.getLogger(__name__)
+            logger.info(f"Testing watsonx connection with model: {settings.watsonx_model_id}")
+            logger.info(f"Project ID: {settings.watsonx_project_id}")
+            logger.info(f"URL: {settings.watsonx_url}")
             
-            # Use the updated model name - gemini-1.5-flash is the current model
-            model = genai.GenerativeModel('gemini-2.0-flash')
-            response = model.generate_content("Say 'Hello, Gemini is working!' in a friendly way")
+            # Configure watsonx credentials
+            credentials = {
+                "url": settings.watsonx_url,
+                "apikey": settings.ibm_cloud_api_key
+            }
+            
+            # Set up model parameters
+            parameters = {
+                GenParams.MAX_NEW_TOKENS: 100,
+                GenParams.TEMPERATURE: 0.7,
+                GenParams.TOP_P: 0.9,
+                GenParams.TOP_K: 50,
+            }
+            
+            # Initialize the model using ModelInference
+            model = ModelInference(
+                model_id=settings.watsonx_model_id,
+                params=parameters,
+                credentials=credentials,
+                project_id=settings.watsonx_project_id
+            )
+            
+            logger.info("Model initialized, attempting to generate text...")
+            
+            # Test with a simple prompt
+            response = model.generate_text(prompt="Say 'Hello from IBM watsonx.ai!'")
+            
+            logger.info(f"Generation successful. Response: {response[:100]}...")
             
             return APIResponse(
                 success=True,
-                message="Gemini AI connection successful",
-                data={"test_response": response.text}
+                message="watsonx.ai connection successful",
+                data={
+                    "test_response": str(response),
+                    "model": settings.watsonx_model_id,
+                    "project_id": settings.watsonx_project_id
+                }
             )
             
-        except Exception as gemini_error:
-            error_message = str(gemini_error)
-            print(f"Gemini API Error Details: {error_message}")  # Add detailed logging
+        except Exception as watsonx_error:
+            error_message = str(watsonx_error)
+            error_type = type(watsonx_error).__name__
+            
+            # Log detailed error information
+            import traceback
+            logger = logging.getLogger(__name__)
+            logger.error(f"watsonx.ai connection test failed: {error_type}: {error_message}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            
+            # Provide more specific error messages
+            if "401" in error_message or "Unauthorized" in error_message:
+                error_detail = "Invalid API key. Please check your IBM_CLOUD_API_KEY."
+            elif "403" in error_message or "Forbidden" in error_message:
+                error_detail = "Access denied. Check if your API key has access to the project."
+            elif "404" in error_message or "Not Found" in error_message:
+                error_detail = "Project or model not found. Verify WATSONX_PROJECT_ID and model ID."
+            elif "429" in error_message or "Too Many Requests" in error_message:
+                error_detail = "⏱️ Rate limit exceeded. Your credentials are valid, but you've reached the API limit. Please wait 5-10 minutes before trying again. This is normal with the free tier."
+            elif "timeout" in error_message.lower():
+                error_detail = "Connection timeout. Check your network connection."
+            else:
+                error_detail = error_message
+            
             return APIResponse(
                 success=False,
-                message="Gemini AI connection failed",
-                data={"error": error_message, "error_type": type(gemini_error).__name__}
+                message=f"watsonx.ai connection failed: {error_detail}",
+                data={
+                    "error": error_message,
+                    "error_type": error_type,
+                    "model": settings.watsonx_model_id,
+                    "project_id": settings.watsonx_project_id
+                }
             )
     
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/settings/test-imagen", response_model=APIResponse)
-async def test_imagen_connection():
-    """Test Google Cloud Imagen API connection."""
-    try:
-        settings = settings_db.get(SETTINGS_ID)
-        if not settings:
-            raise HTTPException(status_code=404, detail="Settings not found")
-        
-        # Check if Imagen is enabled
-        if not getattr(settings, 'imagen_enabled', False):
-            return APIResponse(
-                success=False,
-                message="Imagen API is disabled in settings",
-                data={"error": "Imagen disabled", "error_type": "configuration"}
-            )
-        
-        # Check required configuration
-        project_id = getattr(settings, 'google_cloud_project', None)
-        location = getattr(settings, 'google_cloud_location', 'us-central1')
-        credentials_path = getattr(settings, 'google_cloud_credentials_path', None)
-        
-        if not project_id:
-            return APIResponse(
-                success=False,
-                message="Google Cloud project ID not configured",
-                data={"error": "Missing project ID", "error_type": "configuration"}
-            )
-        
-        # Try to import and test Google Cloud AI Platform
-        try:
-            from google.cloud import aiplatform
-            import os
-            
-            # Set up authentication if credentials path is provided
-            if credentials_path and os.path.exists(credentials_path):
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
-            
-            # Initialize the AI Platform client
-            aiplatform.init(project=project_id, location=location)
-            
-            return APIResponse(
-                success=True,
-                message=f"Google Cloud Imagen API accessible (Project: {project_id}, Location: {location})",
-                data={
-                    "project_id": project_id,
-                    "location": location,
-                    "credentials_configured": bool(credentials_path and os.path.exists(credentials_path)),
-                    "model": getattr(settings, 'imagen_model', 'imagen-3')
-                }
-            )
-            
-        except ImportError:
-            return APIResponse(
-                success=False,
-                message="Google Cloud AI Platform library not installed",
-                data={"error": "Missing google-cloud-aiplatform package", "error_type": "dependency"}
-            )
-        except Exception as e:
-            return APIResponse(
-                success=False,
-                message="Failed to connect to Google Cloud Imagen API",
-                data={"error": str(e), "error_type": type(e).__name__}
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
+        import traceback
+        logger = logging.getLogger(__name__)
+        logger.error(f"Unexpected error in test_watsonx_connection: {str(e)}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/settings/raw", response_model=APIResponse)

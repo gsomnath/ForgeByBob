@@ -5,17 +5,40 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 python-multipart==0.0.6
 
-# Google Gemini AI
-google-generativeai>=0.5.0
+# IBM watsonx.ai (Granite models)
+ibm-watsonx-ai>=1.0.0
+ibm-cloud-sdk-core>=3.18.0
 
-# Google Cloud Imagen (Vertex AI)
-google-cloud-aiplatform
+# IBM Watson Services
+ibm-watson>=7.0.0
+ibm-watson-openscale>=3.0.0
+
+# IBM Cloudant Database
+cloudant>=2.15.0
+
+# Web Search for Research Agent
+duckduckgo-search>=4.0.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+
+# Content Quality Analysis
+detoxify>=0.5.0
 
 # HTTP client
 httpx==0.25.2
 
 # Environment and configuration
 python-dotenv==1.0.0
+
+# Process management
+psutil>=5.9.0
+
+# Jinja2 templates (for UI)
+jinja2>=3.1.0
+
+# REMOVED: Google AI dependencies (migrated to IBM watsonx.ai)
+# google-generativeai - NO LONGER NEEDED
+# google-cloud-aiplatform - Only for Imagen (optional)
 
 # Development dependencies
 pytest==7.4.3

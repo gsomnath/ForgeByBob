@@ -193,11 +193,11 @@ async def get_blog_comments(blog_id: str, client: httpx.AsyncClient = Depends(ge
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
 
 # Logging Endpoints
-@app.get("/api/gemini-logs")
-async def get_gemini_logs(page: int = 1, page_size: int = 10, client: httpx.AsyncClient = Depends(get_http_client)):
-    """Get Gemini API logs."""
+@app.get("/api/watsonx-logs")
+async def get_watsonx_logs(page: int = 1, page_size: int = 10, client: httpx.AsyncClient = Depends(get_http_client)):
+    """Get WatsonX API logs."""
     try:
-        response = await client.get(f"{settings.blog_service_url}/gemini-logs?page={page}&page_size={page_size}")
+        response = await client.get(f"{settings.blog_service_url}/watsonx-logs?page={page}&page_size={page_size}")
         response.raise_for_status()
         return response.json()
     except httpx.RequestError:
@@ -207,7 +207,7 @@ async def get_gemini_logs(page: int = 1, page_size: int = 10, client: httpx.Asyn
 
 @app.get("/api/imagen-logs")
 async def get_imagen_logs(page: int = 1, page_size: int = 10, client: httpx.AsyncClient = Depends(get_http_client)):
-    """Get Imagen API logs."""
+    """Get image generation logs (deprecated feature)."""
     try:
         response = await client.get(f"{settings.blog_service_url}/imagen-logs?page={page}&page_size={page_size}")
         response.raise_for_status()

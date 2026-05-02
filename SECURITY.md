@@ -10,7 +10,7 @@ This document outlines how sensitive information is protected in this project an
 - **Location**: `.env` file in project root
 - **Protection**: Excluded via `.gitignore`
 - **Contains**:
-  - API keys (Gemini AI, Google Cloud)
+  - API keys (IBM Cloud, WatsonX AI)
   - Secret keys for session management
   - Database credentials
   - Service URLs with authentication
@@ -26,7 +26,7 @@ This document outlines how sensitive information is protected in this project an
 ### 3. Credentials Files
 - **Patterns**: `*credentials*.json`, `*.pem`, `*.key`, `*.p12`
 - **Protection**: Excluded via `.gitignore`
-- **Contains**: Google Cloud service account credentials, SSL certificates
+- **Contains**: IBM Cloud service account credentials, SSL certificates
 
 ### 4. Generated Content
 - **Location**: `blogs/`, `generated_images/`
@@ -63,10 +63,10 @@ This document outlines how sensitive information is protected in this project an
    ```python
    # ✅ GOOD - Load from environment
    from shared.config import settings
-   api_key = settings.gemini_api_key
+   api_key = settings.ibm_cloud_api_key
    
    # ❌ BAD - Hardcoded
-   api_key = "AIzaSyABC123..."
+   api_key = "your-api-key-here..."
    ```
 
 ### For API Responses
@@ -75,8 +75,8 @@ The application automatically masks sensitive data in API responses:
 
 ```python
 # In settings_service/main.py
-if settings_data.get("gemini_api_key"):
-    settings_data["gemini_api_key"] = "***masked***"
+if settings_data.get("ibm_cloud_api_key"):
+    settings_data["ibm_cloud_api_key"] = "***masked***"
 ```
 
 ## 🚨 What to Do If Secrets Are Exposed

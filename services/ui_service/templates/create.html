@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Create New Blog{% endblock %}
+{% block title %}Create New Blog - IBM watsonx.ai{% endblock %}
 
 {% block content %}
-<h2>Create New Blog</h2>
+<h2>Create New Blog with IBM watsonx.ai</h2>
 
 {% if error %}
 <div class="alert alert-error">
@@ -40,8 +40,11 @@
         </div>
         
         <div class="form-group">
-            <label for="initial_prompt">Initial Prompt *</label>
+            <label for="initial_prompt">Initial Prompt for IBM watsonx.ai *</label>
             <textarea id="initial_prompt" name="initial_prompt" required placeholder="Describe what you want your blog to be about. Be specific about the topic, target audience, tone, and any key points you want to cover..."></textarea>
+            <p style="font-size: 0.9rem; color: #666; margin-top: 0.5rem;">
+                💡 IBM watsonx.ai will use this prompt to generate your initial blog content.
+            </p>
         </div>
         
         <div class="form-group">
@@ -51,14 +54,15 @@
     </form>
 </div>
 
-<div class="card" style="margin-top: 2rem; background: #ecf0f1;">
-    <h4>Tips for Writing Good Prompts:</h4>
-    <ul style="margin-left: 2rem; margin-top: 1rem;">
-        <li>Be specific about your topic and target audience</li>
-        <li>Mention the desired tone (professional, casual, informative, etc.)</li>
-        <li>Include key points or sections you want covered</li>
-        <li>Specify the approximate length or format you prefer</li>
-        <li>Add any specific requirements or constraints</li>
+<div class="card" style="margin-top: 2rem; background: #e8f4f8; border-left: 4px solid #3498db;">
+    <h4>💡 Tips for Writing Effective Prompts for IBM watsonx.ai:</h4>
+    <ul style="margin-left: 2rem; margin-top: 1rem; line-height: 1.8;">
+        <li><strong>Be specific</strong> about your topic and target audience</li>
+        <li><strong>Mention the desired tone</strong> (professional, casual, informative, technical, etc.)</li>
+        <li><strong>Include key points</strong> or sections you want covered</li>
+        <li><strong>Specify the length</strong> or format you prefer (e.g., "800-word article", "5-section guide")</li>
+        <li><strong>Add requirements</strong> like SEO keywords, specific examples, or constraints</li>
+        <li><strong>Note:</strong> Free tier has rate limits - wait 5 minutes between generations if needed</li>
     </ul>
 </div>
 {% endblock %}
