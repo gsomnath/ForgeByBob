@@ -13,8 +13,6 @@ sys.path.append(str(project_root))
 from shared.config import settings
 from shared.models import APIResponse
 
-# Service URLs
-ORCHESTRATION_SERVICE_URL = "http://localhost:8004"
 
 app = FastAPI(
     title="Blog Writer API Gateway",
@@ -252,7 +250,7 @@ async def generate_blog_orchestrated(request: dict):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{ORCHESTRATION_SERVICE_URL}/blog/generate",
+                f"{settings.orchestration_service_url}/blog/generate",
                 json=request,
                 timeout=60.0
             )
@@ -265,7 +263,7 @@ async def list_pipelines():
     """List all orchestration pipelines"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/pipelines")
+            response = await client.get(f"{settings.orchestration_service_url}/pipelines")
             return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -275,7 +273,7 @@ async def list_agents():
     """List all registered agents"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/agents")
+            response = await client.get(f"{settings.orchestration_service_url}/agents")
             return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -286,7 +284,7 @@ async def get_orchestration_metrics():
     """Get orchestration metrics"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/metrics")
+            response = await client.get(f"{settings.orchestration_service_url}/metrics")
             return response.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
