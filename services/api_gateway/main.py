@@ -13,6 +13,9 @@ sys.path.append(str(project_root))
 from shared.config import settings
 from shared.models import APIResponse
 
+# Service URLs
+ORCHESTRATION_SERVICE_URL = "http://localhost:8004"
+
 app = FastAPI(
     title="Blog Writer API Gateway",
     description="Central API gateway for the blog writer microservice application",
@@ -241,6 +244,52 @@ async def update_settings(settings_data: Dict[str, Any], client: httpx.AsyncClie
         raise HTTPException(status_code=503, detail="Settings service unavailable")
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+
+# Orchestration Service Endpoints
+@app.post("/api/blogs/generate-orchestrated")
+async def generate_blog_orchestrated(request: dict):
+    """Generate blog using orchestration service"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{ORCHESTRATION_SERVICE_URL}/blog/generate",
+                json=request,
+                timeout=60.0
+            )
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/orchestration/pipelines")
+async def list_pipelines():
+    """List all orchestration pipelines"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/pipelines")
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/orchestration/agents")
+async def list_agents():
+    """List all registered agents"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/agents")
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/orchestration/metrics")
+async def get_orchestration_metrics():
+    """Get orchestration metrics"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{ORCHESTRATION_SERVICE_URL}/metrics")
+            return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

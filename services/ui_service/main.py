@@ -62,6 +62,11 @@ async def create_blog_page(request: Request):
     """Blog creation page."""
     return templates.TemplateResponse("create.html", {"request": request})
 
+@app.get("/agents", response_class=HTMLResponse)
+async def agent_dashboard(request: Request):
+    """Agent performance dashboard."""
+    return templates.TemplateResponse("agent_dashboard.html", {"request": request})
+
 @app.post("/create")
 async def create_blog_submit(
     request: Request,
@@ -69,34 +74,57 @@ async def create_blog_submit(
     description: str = Form(""),
     tags: str = Form(""),
     publication_site: str = Form(""),
-    initial_prompt: str = Form(...)
+    initial_prompt: str = Form(...),
+    use_orchestration: Optional[str] = Form(None)
 ):
     """Handle blog creation form submission."""
     try:
-        # Prepare blog data
-        blog_data = {
-            "title": title,
-            "description": description if description else None,
-            "tags": [tag.strip() for tag in tags.split(",") if tag.strip()],
-            "publication_site": publication_site if publication_site else None,
-            "initial_prompt": initial_prompt
-        }
-        
-        # Create blog via API Gateway
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"http://localhost:{settings.api_gateway_port}/api/blogs",
-                json=blog_data
-            )
+        # Check if orchestration is enabled
+        if use_orchestration == "true":
+            # Use orchestration service for blog generation
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"http://localhost:{settings.api_gateway_port}/api/blogs/generate-orchestrated",
+                    json={
+                        "prompt": initial_prompt,
+                        "blog_id": None,
+                        "tone": "professional"
+                    }
+                )
+                
+                if response.status_code == 200:
+                    return RedirectResponse(url="/?success=Blog generated with orchestration", status_code=303)
+                else:
+                    error_msg = "Failed to generate blog with orchestration"
+                    return templates.TemplateResponse("create.html", {
+                        "request": request,
+                        "error": error_msg
+                    })
+        else:
+            # Standard blog creation
+            blog_data = {
+                "title": title,
+                "description": description.strip() if description and description.strip() else None,
+                "tags": [tag.strip() for tag in tags.split(",") if tag.strip()],
+                "publication_site": publication_site.strip() if publication_site and publication_site.strip() else None,
+                "initial_prompt": initial_prompt
+            }
             
-            if response.status_code == 200:
-                return RedirectResponse(url="/", status_code=303)
-            else:
-                error_msg = "Failed to create blog"
-                return templates.TemplateResponse("create.html", {
-                    "request": request,
-                    "error": error_msg
-                })
+            # Create blog via API Gateway
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"http://localhost:{settings.api_gateway_port}/api/blogs",
+                    json=blog_data
+                )
+                
+                if response.status_code == 200:
+                    return RedirectResponse(url="/", status_code=303)
+                else:
+                    error_msg = "Failed to create blog"
+                    return templates.TemplateResponse("create.html", {
+                        "request": request,
+                        "error": error_msg
+                    })
     except Exception as e:
         return templates.TemplateResponse("create.html", {
             "request": request,

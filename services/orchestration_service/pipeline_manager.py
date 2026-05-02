@@ -235,8 +235,6 @@ class PipelineManager:
             "agent_usage": agent_usage
         }
 
-        return await pipeline.execute(initial_input)
-
 
 # Global pipeline manager instance
 pipeline_manager = PipelineManager()

@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Performance Dashboard{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <h2>🤖 Agent Performance Dashboard</h2>
+    <p style="color: #666;">Real-time monitoring of agentic AI orchestration</p>
+</div>
+
+<!-- Metrics Overview -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #3498db;" id="total-pipelines">0</div>
+        <div style="color: #666; margin-top: 0.5rem;">Total Pipelines</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #2ecc71;" id="completed-pipelines">0</div>
+        <div style="color: #666; margin-top: 0.5rem;">Completed</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #e74c3c;" id="failed-pipelines">0</div>
+        <div style="color: #666; margin-top: 0.5rem;">Failed</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #f39c12;" id="running-pipelines">0</div>
+        <div style="color: #666; margin-top: 0.5rem;">Running</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #9b59b6;" id="success-rate">0%</div>
+        <div style="color: #666; margin-top: 0.5rem;">Success Rate</div>
+    </div>
+    <div class="card" style="text-align: center; padding: 1.5rem;">
+        <div style="font-size: 2rem; font-weight: bold; color: #1abc9c;" id="avg-duration">0s</div>
+        <div style="color: #666; margin-top: 0.5rem;">Avg Duration</div>
+    </div>
+</div>
+
+<!-- Agent Runner -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">🚀 Run Individual Agents</h3>
+    <p style="color: #666; margin-bottom: 1rem;">Execute agents independently with custom input</p>
+    <div id="agent-runner" style="display: grid; gap: 1rem;">
+        <!-- Agent cards will be populated here -->
+    </div>
+</div>
+
+<!-- Agent Usage Statistics -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Agent Usage Statistics</h3>
+    <div id="agent-stats" style="display: grid; gap: 1rem;">
+        <!-- Agent stats will be populated here -->
+    </div>
+</div>
+
+<!-- Active Pipelines -->
+<div class="card" style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3>Active Pipelines</h3>
+        <button onclick="refreshDashboard()" class="btn" style="font-size: 0.9rem; padding: 0.5rem 1rem;">
+            🔄 Refresh
+        </button>
+    </div>
+    <div id="pipelines-list">
+        <!-- Pipelines will be populated here -->
+    </div>
+</div>
+
+<!-- Recent Pipeline Executions -->
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Recent Pipeline Executions</h3>
+    <div id="recent-pipelines">
+        <!-- Recent pipelines will be populated here -->
+    </div>
+</div>
+
+<script>
+// Auto-refresh every 3 seconds
+let autoRefreshInterval;
+
+async function fetchMetrics() {
+    try {
+        const response = await fetch('http://localhost:8004/metrics');
+        const data = await response.json();
+        return data.data;
+    } catch (error) {
+        console.error('Error fetching metrics:', error);
+        return null;
+    }
+}
+
+async function fetchPipelines() {
+    try {
+        const response = await fetch('http://localhost:8004/pipelines');
+        const data = await response.json();
+        return data.data;
+    } catch (error) {
+        console.error('Error fetching pipelines:', error);
+        return null;
+    }
+}
+
+async function fetchAgents() {
+    try {
+        const response = await fetch('http://localhost:8004/agents');
+        const data = await response.json();
+        return data.data;
+    } catch (error) {
+        console.error('Error fetching agents:', error);
+        return null;
+    }
+}
+
+async function runAgent(agentName, inputData) {
+    try {
+        const response = await fetch(`http://localhost:8004/agents/${agentName}/run`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(inputData)
+        });
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error running agent:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+function showAgentInputModal(agentName, metadata) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    `;
+    
+    const inputFields = Object.entries(metadata.input_schema).map(([key, desc]) => `
+        <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">${key}</label>
+            <textarea
+                id="input-${key}"
+                placeholder="${desc}"
+                style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; min-height: 60px;"
+            ></textarea>
+        </div>
+    `).join('');
+    
+    modal.innerHTML = `
+        <div style="background: white; padding: 2rem; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 1rem;">Run ${metadata.display_name}</h3>
+            <p style="color: #666; margin-bottom: 1.5rem;">${metadata.description}</p>
+            
+            <form id="agent-form">
+                ${inputFields}
+                
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="submit" class="btn" style="flex: 1;">
+                        ▶️ Run Agent
+                    </button>
+                    <button type="button" class="btn" onclick="this.closest('[style*=fixed]').remove()"
+                            style="flex: 1; background: #95a5a6;">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+            
+            <div id="agent-result" style="margin-top: 1.5rem; display: none;"></div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('agent-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const inputData = {};
+        Object.keys(metadata.input_schema).forEach(key => {
+            const value = document.getElementById(`input-${key}`).value;
+            if (value) inputData[key] = value;
+        });
+        
+        const resultDiv = document.getElementById('agent-result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<p style="color: #f39c12;">⏳ Running agent...</p>';
+        
+        const result = await runAgent(agentName, inputData);
+        
+        if (result.success) {
+            resultDiv.innerHTML = `
+                <div style="padding: 1rem; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px;">
+                    <strong style="color: #155724;">✓ Success!</strong>
+                    <pre style="margin-top: 0.5rem; white-space: pre-wrap; font-size: 0.9rem;">${JSON.stringify(result.data, null, 2)}</pre>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="button" class="btn" onclick="this.closest('[style*=fixed]').remove()"
+                            style="flex: 1; background: #2ecc71;">
+                        ✓ Close
+                    </button>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div style="padding: 1rem; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;">
+                    <strong style="color: #721c24;">✗ Error</strong>
+                    <p style="margin-top: 0.5rem;">${result.error || result.detail || 'Unknown error'}</p>
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button type="button" class="btn" onclick="this.closest('[style*=fixed]').remove()"
+                            style="flex: 1; background: #95a5a6;">
+                        Close
+                    </button>
+                </div>
+            `;
+        }
+    });
+}
+
+function updateAgentRunner(agents) {
+    if (!agents || !agents.agent_metadata) return;
+    
+    const runnerDiv = document.getElementById('agent-runner');
+    runnerDiv.innerHTML = '';
+    
+    for (const [agentName, metadata] of Object.entries(agents.agent_metadata)) {
+        const agentCard = document.createElement('div');
+        agentCard.style.cssText = 'border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; cursor: pointer; transition: all 0.2s;';
+        agentCard.onmouseover = () => agentCard.style.borderColor = '#3498db';
+        agentCard.onmouseout = () => agentCard.style.borderColor = '#ddd';
+        
+        agentCard.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                <div>
+                    <strong style="font-size: 1.1rem; color: #2c3e50; display: block;">${metadata.display_name}</strong>
+                    <span style="background: #3498db; color: white; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; display: inline-block; margin-top: 0.25rem;">
+                        ${agentName}
+                    </span>
+                </div>
+                <button style="background: #3498db; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                    ▶️ Run
+                </button>
+            </div>
+            <p style="color: #666; margin-bottom: 1rem; line-height: 1.5;">${metadata.description}</p>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                ${Object.keys(metadata.input_schema).map(key =>
+                    `<span style="background: #ecf0f1; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem;">📝 ${key}</span>`
+                ).join('')}
+            </div>
+        `;
+        
+        agentCard.onclick = () => showAgentInputModal(agentName, metadata);
+        runnerDiv.appendChild(agentCard);
+    }
+}
+
+function updateMetrics(metrics) {
+    if (!metrics) return;
+    
+    document.getElementById('total-pipelines').textContent = metrics.total_pipelines;
+    document.getElementById('completed-pipelines').textContent = metrics.completed;
+    document.getElementById('failed-pipelines').textContent = metrics.failed;
+    document.getElementById('running-pipelines').textContent = metrics.running;
+    document.getElementById('success-rate').textContent = metrics.success_rate.toFixed(1) + '%';
+    document.getElementById('avg-duration').textContent = metrics.avg_duration_seconds.toFixed(1) + 's';
+    
+    // Update agent stats
+    const agentStatsDiv = document.getElementById('agent-stats');
+    agentStatsDiv.innerHTML = '';
+    
+    for (const [agentName, stats] of Object.entries(metrics.agent_usage)) {
+        const successRate = stats.total > 0 ? (stats.success / stats.total * 100).toFixed(1) : 0;
+        const agentCard = `
+            <div style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <strong style="text-transform: capitalize;">${agentName} Agent</strong>
+                    <span style="background: #3498db; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                        ${successRate}% success
+                    </span>
+                </div>
+                <div style="display: flex; gap: 1rem; font-size: 0.9rem; color: #666;">
+                    <span>Total: ${stats.total}</span>
+                    <span style="color: #2ecc71;">✓ ${stats.success}</span>
+                    <span style="color: #e74c3c;">✗ ${stats.failed}</span>
+                </div>
+            </div>
+        `;
+        agentStatsDiv.innerHTML += agentCard;
+    }
+}
+
+function updatePipelines(pipelines) {
+    if (!pipelines) return;
+    
+    const pipelinesDiv = document.getElementById('pipelines-list');
+    const recentDiv = document.getElementById('recent-pipelines');
+    
+    const pipelineArray = Object.entries(pipelines);
+    
+    if (pipelineArray.length === 0) {
+        pipelinesDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 2rem;">No pipelines yet</p>';
+        recentDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 2rem;">No recent executions</p>';
+        return;
+    }
+    
+    // Show running pipelines
+    const runningPipelines = pipelineArray.filter(([_, p]) => p.state === 'running');
+    if (runningPipelines.length > 0) {
+        pipelinesDiv.innerHTML = runningPipelines.map(([id, pipeline]) => {
+            const progress = pipeline.total_steps > 0 ? 
+                ((pipeline.current_step + 1) / pipeline.total_steps * 100).toFixed(0) : 0;
+            
+            return `
+                <div style="border: 1px solid #f39c12; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; background: #fff9e6;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>${pipeline.name}</strong>
+                        <span style="background: #f39c12; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                            RUNNING
+                        </span>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <div style="background: #ecf0f1; height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: #f39c12; height: 100%; width: ${progress}%; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #666;">
+                        Step ${pipeline.current_step + 1} of ${pipeline.total_steps} • ${progress}% complete
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        pipelinesDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 1rem;">No active pipelines</p>';
+    }
+    
+    // Show recent completed/failed pipelines
+    const recentPipelines = pipelineArray
+        .filter(([_, p]) => p.state === 'completed' || p.state === 'failed')
+        .slice(0, 5);
+    
+    if (recentPipelines.length > 0) {
+        recentDiv.innerHTML = recentPipelines.map(([id, pipeline]) => {
+            const stateColor = pipeline.state === 'completed' ? '#2ecc71' : '#e74c3c';
+            const stateText = pipeline.state === 'completed' ? 'COMPLETED' : 'FAILED';
+            
+            return `
+                <div style="border: 1px solid ${stateColor}; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>${pipeline.name}</strong>
+                        <span style="background: ${stateColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">
+                            ${stateText}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #666;">
+                        ${pipeline.total_steps} steps • ${pipeline.duration_seconds ? pipeline.duration_seconds.toFixed(2) + 's' : 'N/A'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        recentDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 1rem;">No recent executions</p>';
+    }
+}
+
+async function refreshDashboard() {
+    const metrics = await fetchMetrics();
+    const pipelines = await fetchPipelines();
+    const agents = await fetchAgents();
+    
+    updateMetrics(metrics);
+    updatePipelines(pipelines);
+    updateAgentRunner(agents);
+}
+
+// Initial load
+refreshDashboard();
+
+// Auto-refresh every 3 seconds
+autoRefreshInterval = setInterval(refreshDashboard, 3000);
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+});
+</script>
+{% endblock %}

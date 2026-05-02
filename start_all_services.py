@@ -171,6 +171,7 @@ def main():
         ("settings_service", 8002),
         ("api_gateway", 8000),
         ("blog_service", 8001),
+        ("orchestration_service", 8004),
         ("ui_service", 8003),
     ]
     
