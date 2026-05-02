@@ -155,7 +155,7 @@ def generate_static_image_url(blog_id: str, image_number: int) -> str:
     image_id = int(hash_value[:6], 16) % 1000 + 1
     return f"https://picsum.photos/id/{image_id}/800/600"
 
-def save_imagen_response_to_file(imagen_response, blog_id: str, image_number: int) -> str:
+def save_imagen_response_to_file(imagen_response, blog_id: str, image_number: int) -> Optional[str]:
     """Save Imagen API response image to local file and return the URL."""
     try:
         # Create images directory if it doesn't exist
@@ -323,7 +323,7 @@ def log_watsonx_request(blog_id: str, prompt: str, model_used: str = "ibm/granit
     watsonx_logs.insert(0, log_entry)  # Add to beginning (newest first)
     return log_entry.id
 
-def log_watsonx_response(log_id: str, response_content: str = None, error_message: str = None, processing_time_ms: int = None):
+def log_watsonx_response(log_id: str, response_content: Optional[str] = None, error_message: Optional[str] = None, processing_time_ms: Optional[int] = None):
     """Update a WatsonX API log with response information."""
     global watsonx_logs
     for log_entry in watsonx_logs:
